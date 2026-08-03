@@ -3,8 +3,13 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import { config } from '../config/index';
 
+// pg parses `sslmode` out of the connection string and lets it override an
+// explicit `ssl` option, so it must be stripped for `rejectUnauthorized: false` to apply.
+const connectionUrl = new URL(config.databaseUrl);
+connectionUrl.searchParams.delete('sslmode');
+
 const pool = new pg.Pool({
-  connectionString: config.databaseUrl,
+  connectionString: connectionUrl.toString(),
   ssl: { rejectUnauthorized: false },
 });
 
