@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+/generated/prisma
+
+# IDE / AI Agent directories
+.windsurf/
+.agents/
+.claude/
+
+*.sql
