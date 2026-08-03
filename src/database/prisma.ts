@@ -5,6 +5,7 @@ import { config } from '../config/index';
 
 const pool = new pg.Pool({
   connectionString: config.databaseUrl,
+  ssl: { rejectUnauthorized: false },
 });
 
 const adapter = new PrismaPg(pool);
