@@ -125,7 +125,10 @@ function castValueForField(fieldType: string | undefined, key: string, val: any)
         return val;
 
       case 'DateTime':
-        if (typeof val === 'string' && val.trim() !== '') {
+        if (!val || (typeof val === 'string' && val.trim() === '')) {
+          return null;
+        }
+        if (typeof val === 'string') {
           const str = val.trim();
           if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
             return new Date(`${str}T00:00:00.000Z`).toISOString();
@@ -135,7 +138,7 @@ function castValueForField(fieldType: string | undefined, key: string, val: any)
             return d.toISOString();
           }
         }
-        return val;
+        return null;
 
       case 'String':
         if (typeof val !== 'string') {
