@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { IndentController } from '../controllers/indent.controller';
 import { UserController } from '../controllers/user.controller';
 import { GenericController } from '../controllers/generic.controller';
+import { UploadController } from '../controllers/upload.controller';
 import { validate } from '../../../middleware/validate.middleware';
+import { uploadSingle } from '../../../middleware/upload.middleware';
 import {
   updateIndentApprovalSchema,
   updateIndentSpecificationsSchema,
@@ -18,6 +20,7 @@ const router = Router();
 const indentController = new IndentController();
 const userController = new UserController();
 const genericController = new GenericController();
+const uploadController = new UploadController();
 
 // ==================== USER ROUTES ====================
 router.get('/users', userController.getUsers);
@@ -39,6 +42,11 @@ router.patch('/indents/number/:indentNumber/hod-approval', validate(updateIndent
 router.patch('/indents/number/:indentNumber/po-creation', validate(updateIndentPOCreationSchema), indentController.updatePOCreation);
 router.patch('/indents/number/:indentNumber/payment-terms', validate(updateIndentPaymentTermsSchema), indentController.updatePaymentTerms);
 router.patch('/indents/number/:indentNumber/store-out-approval', validate(updateIndentStoreOutApprovalSchema), indentController.updateStoreOutApproval);
+
+// ==================== UPLOAD & FILE ROUTES ====================
+router.post('/upload', uploadSingle, uploadController.uploadFile);
+router.get('/file-proxy', uploadController.getFile);
+router.get('/files/*filePath', uploadController.getFile);
 
 // ==================== GENERIC ENTITY ROUTES ====================
 router.get('/entity/:table', genericController.getEntities);

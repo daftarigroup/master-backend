@@ -27,24 +27,47 @@ function getPrismaModel(tableName: string, client?: any): any {
 }
 
 // Map of model name (capitalized/camelCase) -> Map of field name -> { type, kind }
-const MODEL_FIELDS_CACHE: Record<string, Record<string, { type: string; kind: string }>> = {};
+const MODEL_FIELDS_CACHE: Record<string, Record<string, { type: string; kind: string; isRequired: boolean }>> = {};
 
-function getModelFields(tableName: string): Record<string, { type: string; kind: string }> {
+function getModelFields(tableName: string): Record<string, { type: string; kind: string; isRequired: boolean }> {
   const modelKey = getModelKey(tableName);
   if (MODEL_FIELDS_CACHE[modelKey]) {
     return MODEL_FIELDS_CACHE[modelKey];
   }
 
-  const fieldsMap: Record<string, { type: string; kind: string }> = {};
-  const dmmfModels = Prisma.dmmf?.datamodel?.models || [];
-  const modelDef = dmmfModels.find(
+  const fieldsMap: Record<string, { type: string; kind: string; isRequired: boolean }> = {};
+  const dmmf = Prisma.dmmf || (prisma as any)?._dmmf || (prisma as any)?._baseDmmf;
+  const dmmfModels: readonly any[] = dmmf?.datamodel?.models || [];
+  let modelDef = dmmfModels.find(
     (m) => m.name.toLowerCase() === modelKey.toLowerCase()
   );
 
-  if (modelDef) {
+  if (!modelDef) {
+    const runtimeModels = (prisma as any)?._runtimeDataModel?.models;
+    if (runtimeModels) {
+      const matchKey = Object.keys(runtimeModels).find((k) => k.toLowerCase() === modelKey.toLowerCase());
+      if (matchKey) {
+        const rModel = runtimeModels[matchKey];
+        modelDef = {
+          fields: Object.entries(rModel.fields || {}).map(([fname, fdef]: [string, any]) => ({
+            name: fname,
+            type: fdef.type,
+            kind: fdef.kind || 'scalar',
+            isRequired: !fdef.isOptional && !fdef.isNullable,
+          })),
+        };
+      }
+    }
+  }
+
+  if (modelDef?.fields) {
     for (const f of modelDef.fields) {
       if (typeof f.type === 'string') {
-        fieldsMap[f.name] = { type: f.type, kind: f.kind };
+        fieldsMap[f.name] = {
+          type: f.type,
+          kind: f.kind,
+          isRequired: f.isRequired ?? (!f.isNullable && !f.isOptional),
+        };
       }
     }
   }
@@ -144,13 +167,18 @@ function parseWhereFilters(tableName: string, filters: Record<string, any>): Rec
     if (key.startsWith('not_null__')) {
       // not_null__colName=true → WHERE colName IS NOT NULL
       const col = key.slice(10);
-      if (rawVal === 'true' || rawVal === true) {
+      const fieldDef = fieldsMap[col];
+      // Non-nullable columns in Prisma schema can never be null in PostgreSQL.
+      // Passing { not: null } on a non-nullable column causes Prisma runtime error "Argument `not` must not be null".
+      // Therefore, only add { not: null } if the field is explicitly known to be optional/nullable (isRequired === false).
+      if ((rawVal === 'true' || rawVal === true) && fieldDef && fieldDef.isRequired === false) {
         where[col] = { not: null };
       }
     } else if (key.startsWith('is_null__')) {
       // is_null__colName=true → WHERE colName IS NULL
       const col = key.slice(9);
-      if (rawVal === 'true' || rawVal === true) {
+      const fieldDef = fieldsMap[col];
+      if ((rawVal === 'true' || rawVal === true) && fieldDef && fieldDef.isRequired === false) {
         where[col] = null;
       }
     } else {

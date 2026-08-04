@@ -8,9 +8,11 @@ import { config } from '../config/index';
 const connectionUrl = new URL(config.databaseUrl);
 connectionUrl.searchParams.delete('sslmode');
 
+const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(connectionUrl.hostname);
+
 const pool = new pg.Pool({
   connectionString: connectionUrl.toString(),
-  ssl: { rejectUnauthorized: false },
+  ssl: isLocalHost ? false : { rejectUnauthorized: false },
 });
 
 const adapter = new PrismaPg(pool);
