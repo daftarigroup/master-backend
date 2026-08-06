@@ -13,835 +13,987 @@ enum AccessType {
   EDIT
 }
 
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+enum TaskStatus {
+  pending
+  done
+  extend
+  extended
+  approved
+  rejected
+}
+
 model AreaOfUse {
-  id           BigInt @id @default(autoincrement())
-  name         String? @db.Text
-  created_at   DateTime @db.Timestamptz() @default(now())
+  id         BigInt   @id @default(autoincrement())
+  name       String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+
   @@map("area_of_use")
 }
 
 model Company {
-  id                    BigInt @id @default(autoincrement())
-  company_name          String @db.Text
-  gstin                 String? @db.Text
-  pan                   String? @db.Text
-  email                 String? @db.Text
-  phone                 String? @db.Text
-  address               String? @db.Text
-  contact_person        String? @db.Text
-  created_at            DateTime @db.Timestamptz() @default(now())
-  updated_at            DateTime @db.Timestamptz() @default(now())
-  billing_address       String? @db.Text
-  destination_address   String? @db.Text
-  firm                  Firm[]
+  id                  BigInt   @id @default(autoincrement())
+  company_name        String   @db.Text
+  gstin               String?  @db.Text
+  pan                 String?  @db.Text
+  email               String?  @db.Text
+  phone               String?  @db.Text
+  address             String?  @db.Text
+  contact_person      String?  @db.Text
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @db.Timestamptz()
+  billing_address     String?  @db.Text
+  destination_address String?  @db.Text
+  firm                Firm[]
+
   @@map("company")
 }
 
 model ContractorDetails {
-  id                   BigInt @id @default(autoincrement())
-  created_at           DateTime? @db.Timestamptz() @default(now())
-  contractor_name      String @db.Text
-  contractor_gstin     String? @db.Text
-  contractor_address   String? @db.Text
-  contractor_email     String? @db.Text
-  responsible_person   String? @db.Text
-  location             String? @db.Text
-  phone                String? @db.Text
+  id                 BigInt    @id @default(autoincrement())
+  created_at         DateTime? @default(now()) @db.Timestamptz()
+  contractor_name    String    @db.Text
+  contractor_gstin   String?   @db.Text
+  contractor_address String?   @db.Text
+  contractor_email   String?   @db.Text
+  responsible_person String?   @db.Text
+  location           String?   @db.Text
+  phone              String?   @db.Text
+
   @@map("contractor_details")
 }
 
 model DefaultPoTerms {
-  id           BigInt @id @default(autoincrement())
-  term_text    String @db.Text
-  sort_order   Int?
-  active       Boolean @default(true)
-  created_at   DateTime @db.Timestamptz() @default(now())
+  id         BigInt   @id @default(autoincrement())
+  term_text  String   @db.Text
+  sort_order Int?
+  active     Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz()
+
   @@map("default_po_terms")
 }
 
 model Department {
-  id           BigInt @id @default(autoincrement())
-  name         String @db.Text
-  created_at   DateTime @db.Timestamptz() @default(now())
+  id         BigInt   @id @default(autoincrement())
+  name       String   @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+
   @@map("department")
 }
 
 model Firm {
-  id                             BigInt @id @default(autoincrement())
-  company_id                     BigInt?
-  firm_name                      String @db.Text
-  billing_address                String? @db.Text
-  destination_address            String? @db.Text
-  contact_person                 String? @db.Text
-  active                         Boolean @default(true)
-  created_at                     DateTime @db.Timestamptz() @default(now())
-  updated_at                     DateTime @db.Timestamptz() @default(now())
-  company                        Company? @relation(fields: [company_id], references: [id])
-  fullkitting                    Fullkitting[]
-  indent                         Indent[]
-  inventory                      Inventory[]
-  issue                          Issue[]
-  payment_history                PaymentHistory[]
-  payments                       Payments[]
-  po_master                      PoMaster[]
-  quotation_history              QuotationHistory[]
-  stock_transfers_from_firm_id   StockTransfers[] @relation("from_firm_id")
-  stock_transfers_to_firm_id     StockTransfers[] @relation("to_firm_id")
-  store_in                       StoreIn[]
-  store_in_direct                StoreInDirect[]
-  tally_entry                    TallyEntry[]
-  item                           Item[]
+  id                           BigInt             @id @default(autoincrement())
+  company_id                   BigInt?
+  firm_name                    String             @db.Text
+  billing_address              String?            @db.Text
+  destination_address          String?            @db.Text
+  contact_person               String?            @db.Text
+  active                       Boolean            @default(true)
+  created_at                   DateTime           @default(now()) @db.Timestamptz()
+  updated_at                   DateTime           @default(now()) @db.Timestamptz()
+  company                      Company?           @relation(fields: [company_id], references: [id])
+  fullkitting                  Fullkitting[]
+  indent                       Indent[]
+  inventory                    Inventory[]
+  issue                        Issue[]
+  payment_history              PaymentHistory[]
+  payments                     Payments[]
+  po_master                    PoMaster[]
+  quotation_history            QuotationHistory[]
+  stock_transfers_from_firm_id StockTransfers[]   @relation("from_firm_id")
+  stock_transfers_to_firm_id   StockTransfers[]   @relation("to_firm_id")
+  store_in                     StoreIn[]
+  store_in_direct              StoreInDirect[]
+  tally_entry                  TallyEntry[]
+  item                         Item[]
+  checklist_task               ChecklistTask[]
+  delegation_task              DelegationTask[]
+
   @@map("firm")
 }
 
 model Fullkitting {
-  id                      BigInt @id @default(autoincrement())
-  timestamp               DateTime @db.Timestamp()
-  indent_number           String? @db.Text
-  vendor_name             String? @db.Text
-  product_name            String? @db.Text
-  qty                     String? @db.Text
-  bill_no                 String? @db.Text
-  transporting_include    String? @db.Text
-  transporter_name        String? @db.Text
-  amount                  String? @db.Text
-  vehical_no              String? @db.Text
-  driver_name             String? @db.Text
-  driver_mobile_no        String? @db.Text
-  planned                 DateTime? @db.Timestamp()
-  actual                  DateTime? @db.Timestamp()
-  time_delay              String? @db.Text
-  fms_name_match          String? @db.Text
-  status                  String? @db.Text
-  vehicle_number          String? @db.Text
-  from                    String? @db.Text
-  to                      String? @db.Text
-  material_load_details   String? @db.Text
-  bilty_number            String? @db.Text
-  rate_type               String? @db.Text
-  amount1                 String? @db.Text
-  bilty_image             String? @db.Text
-  firm_name               String? @db.Text
-  firm_id                 BigInt?
-  firm                    Firm? @relation(fields: [firm_id], references: [id])
+  id                    BigInt    @id @default(autoincrement())
+  timestamp             DateTime  @db.Timestamp()
+  indent_number         String?   @db.Text
+  vendor_name           String?   @db.Text
+  product_name          String?   @db.Text
+  qty                   String?   @db.Text
+  bill_no               String?   @db.Text
+  transporting_include  String?   @db.Text
+  transporter_name      String?   @db.Text
+  amount                String?   @db.Text
+  vehical_no            String?   @db.Text
+  driver_name           String?   @db.Text
+  driver_mobile_no      String?   @db.Text
+  planned               DateTime? @db.Timestamp()
+  actual                DateTime? @db.Timestamp()
+  time_delay            String?   @db.Text
+  fms_name_match        String?   @db.Text
+  status                String?   @db.Text
+  vehicle_number        String?   @db.Text
+  from                  String?   @db.Text
+  to                    String?   @db.Text
+  material_load_details String?   @db.Text
+  bilty_number          String?   @db.Text
+  rate_type             String?   @db.Text
+  amount1               String?   @db.Text
+  bilty_image           String?   @db.Text
+  firm_name             String?   @db.Text
+  firm_id               BigInt?
+  firm                  Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("fullkitting")
 }
 
 model GroupHead {
-  id           BigInt @id @default(autoincrement())
-  name         String? @db.Text
-  created_at   DateTime @db.Timestamptz() @default(now())
-  item         Item[]
+  id         BigInt   @id @default(autoincrement())
+  name       String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+  item       Item[]
+
   @@map("group_head")
 }
 
 model Indent {
-  id                         BigInt @id @default(autoincrement())
-  timestamp                  DateTime @db.Timestamptz()
-  indent_number              String? @db.Text
-  firm_name                  String? @db.Text
-  indenter_name              String? @db.Text
-  department                 String? @db.Text
-  area_of_use                String? @db.Text
-  group_head                 String? @db.Text
-  product_name               String? @db.Text
-  quantity                   String? @db.Text
-  uom                        String? @db.Text
-  specifications             String? @db.Text
-  indent_approved_by         String? @db.Text
-  indent_type                String? @db.Text
-  attachment                 String? @db.Text
-  indent_status              String? @db.Text
-  no_day                     String? @db.Text
-  planned1                   DateTime? @db.Timestamp()
-  actual1                    DateTime? @db.Timestamp()
-  time_delay1                String? @db.Text
-  vendor_type                String? @db.Text
-  approved_quantity          String? @db.Text
-  planned2                   DateTime? @db.Timestamp()
-  actual2                    DateTime? @db.Timestamp()
-  time_delay2                String? @db.Text
-  vendor_name1               String? @db.Text
-  select_rate_type1          String? @db.Text
-  rate1                      String? @db.Text
-  with_tax_or_not1           String? @db.Text
-  tax_value1                 String? @db.Text
-  payment_term1              String? @db.Text
-  whatsapp_number1           String? @db.Text
-  email_id1                  String? @db.Text
-  vendor_name2               String? @db.Text
-  select_rate_type2          String? @db.Text
-  rate2                      String? @db.Text
-  with_tax_or_not2           String? @db.Text
-  tax_value2                 String? @db.Text
-  payment_term2              String? @db.Text
-  whatsapp_number2           String? @db.Text
-  email_id2                  String? @db.Text
-  vendor_name3               String? @db.Text
-  select_rate_type3          String? @db.Text
-  rate3                      String? @db.Text
-  with_tax_or_not3           String? @db.Text
-  tax_value3                 String? @db.Text
-  payment_term3              String? @db.Text
-  whatsapp_number3           String? @db.Text
-  email_id3                  String? @db.Text
-  product_code               String? @db.Text
-  comparison_sheet           String? @db.Text
-  planned3                   DateTime? @db.Timestamp()
-  actual3                    DateTime? @db.Timestamp()
-  time_delay3                String? @db.Text
-  approved_vendor_name       String? @db.Text
-  approved_rate              String? @db.Text
-  with_tax_or_not4           String? @db.Text
-  tax_value4                 String? @db.Text
-  approved_payment_term      String? @db.Text
-  approved_date              String? @db.Text
-  planned4                   DateTime? @db.Timestamp()
-  actual4                    DateTime? @db.Timestamp()
-  time_delay4                String? @db.Text
-  po_number                  String? @db.Text
-  po_copy                    String? @db.Text
-  payment_term               String? @db.Text
-  planned5                   DateTime? @db.Timestamp()
-  actual5                    DateTime? @db.Timestamp()
-  time_delay                 String? @db.Text
-  po_qty                     String? @db.Text
-  pending_po_qty             String? @db.Text
-  status                     String? @db.Text
-  total_qty                  String? @db.Text
-  received_qty               String? @db.Text
-  planned7                   DateTime? @db.Timestamp()
-  actual7                    DateTime? @db.Timestamp()
-  time_delay7                String? @db.Text
-  make_payment_link          String? @db.Text
-  lifting_status             String? @db.Text
-  pending_lift_qty           String? @db.Text
-  po_requred                 String? @db.Text
-  vendor_rate                String? @db.Text
-  vendor_amount              String? @db.Text
-  delivery_date              DateTime? @db.Date
-  payment_type               String? @db.Text
-  pending_qty                String? @db.Text
-  cancel_qty                 String? @db.Text
-  advance_percent1           String? @db.Text
-  advance_percent2           String? @db.Text
-  advance_percent3           String? @db.Text
-  approved_advance_percent   String? @db.Text
-  expected_req_date          DateTime? @db.Date
-  min_stock_qty              String? @db.Text
-  quotation_no1              String? @db.Text @default("")
-  quotation_date1            String? @db.Text @default("")
-  quotation_no2              String? @db.Text @default("")
-  quotation_date2            String? @db.Text @default("")
-  quotation_no3              String? @db.Text @default("")
-  quotation_date3            String? @db.Text @default("")
-  approved_quotation_no      String? @db.Text @default("")
-  approved_quotation_date    String? @db.Text @default("")
-  vendor1_rank               String? @db.Text
-  vendor2_rank               String? @db.Text
-  vendor3_rank               String? @db.Text
-  delivery_time1             String? @db.Text
-  delivery_time2             String? @db.Text
-  delivery_time3             String? @db.Text
-  make1                      String? @db.Text
-  make2                      String? @db.Text
-  make3                      String? @db.Text
-  indent_url                 String? @db.Text @default("")
-  accept_indent_url          String? @db.Text @default("")
-  firm_id                    BigInt?
-  firm                       Firm? @relation(fields: [firm_id], references: [id])
+  id                       BigInt    @id @default(autoincrement())
+  timestamp                DateTime  @db.Timestamptz()
+  indent_number            String?   @db.Text
+  firm_name                String?   @db.Text
+  indenter_name            String?   @db.Text
+  department               String?   @db.Text
+  area_of_use              String?   @db.Text
+  group_head               String?   @db.Text
+  product_name             String?   @db.Text
+  quantity                 String?   @db.Text
+  uom                      String?   @db.Text
+  specifications           String?   @db.Text
+  indent_approved_by       String?   @db.Text
+  indent_type              String?   @db.Text
+  attachment               String?   @db.Text
+  indent_status            String?   @db.Text
+  no_day                   String?   @db.Text
+  planned1                 DateTime? @db.Timestamp()
+  actual1                  DateTime? @db.Timestamp()
+  time_delay1              String?   @db.Text
+  vendor_type              String?   @db.Text
+  approved_quantity        String?   @db.Text
+  planned2                 DateTime? @db.Timestamp()
+  actual2                  DateTime? @db.Timestamp()
+  time_delay2              String?   @db.Text
+  vendor_name1             String?   @db.Text
+  select_rate_type1        String?   @db.Text
+  rate1                    String?   @db.Text
+  with_tax_or_not1         String?   @db.Text
+  tax_value1               String?   @db.Text
+  payment_term1            String?   @db.Text
+  whatsapp_number1         String?   @db.Text
+  email_id1                String?   @db.Text
+  vendor_name2             String?   @db.Text
+  select_rate_type2        String?   @db.Text
+  rate2                    String?   @db.Text
+  with_tax_or_not2         String?   @db.Text
+  tax_value2               String?   @db.Text
+  payment_term2            String?   @db.Text
+  whatsapp_number2         String?   @db.Text
+  email_id2                String?   @db.Text
+  vendor_name3             String?   @db.Text
+  select_rate_type3        String?   @db.Text
+  rate3                    String?   @db.Text
+  with_tax_or_not3         String?   @db.Text
+  tax_value3               String?   @db.Text
+  payment_term3            String?   @db.Text
+  whatsapp_number3         String?   @db.Text
+  email_id3                String?   @db.Text
+  product_code             String?   @db.Text
+  comparison_sheet         String?   @db.Text
+  planned3                 DateTime? @db.Timestamp()
+  actual3                  DateTime? @db.Timestamp()
+  time_delay3              String?   @db.Text
+  approved_vendor_name     String?   @db.Text
+  approved_rate            String?   @db.Text
+  with_tax_or_not4         String?   @db.Text
+  tax_value4               String?   @db.Text
+  approved_payment_term    String?   @db.Text
+  approved_date            String?   @db.Text
+  planned4                 DateTime? @db.Timestamp()
+  actual4                  DateTime? @db.Timestamp()
+  time_delay4              String?   @db.Text
+  po_number                String?   @db.Text
+  po_copy                  String?   @db.Text
+  payment_term             String?   @db.Text
+  planned5                 DateTime? @db.Timestamp()
+  actual5                  DateTime? @db.Timestamp()
+  time_delay               String?   @db.Text
+  po_qty                   String?   @db.Text
+  pending_po_qty           String?   @db.Text
+  status                   String?   @db.Text
+  total_qty                String?   @db.Text
+  received_qty             String?   @db.Text
+  planned7                 DateTime? @db.Timestamp()
+  actual7                  DateTime? @db.Timestamp()
+  time_delay7              String?   @db.Text
+  make_payment_link        String?   @db.Text
+  lifting_status           String?   @db.Text
+  pending_lift_qty         String?   @db.Text
+  po_requred               String?   @db.Text
+  vendor_rate              String?   @db.Text
+  vendor_amount            String?   @db.Text
+  delivery_date            DateTime? @db.Date
+  payment_type             String?   @db.Text
+  pending_qty              String?   @db.Text
+  cancel_qty               String?   @db.Text
+  advance_percent1         String?   @db.Text
+  advance_percent2         String?   @db.Text
+  advance_percent3         String?   @db.Text
+  approved_advance_percent String?   @db.Text
+  expected_req_date        DateTime? @db.Date
+  min_stock_qty            String?   @db.Text
+  quotation_no1            String?   @default("") @db.Text
+  quotation_date1          String?   @default("") @db.Text
+  quotation_no2            String?   @default("") @db.Text
+  quotation_date2          String?   @default("") @db.Text
+  quotation_no3            String?   @default("") @db.Text
+  quotation_date3          String?   @default("") @db.Text
+  approved_quotation_no    String?   @default("") @db.Text
+  approved_quotation_date  String?   @default("") @db.Text
+  vendor1_rank             String?   @db.Text
+  vendor2_rank             String?   @db.Text
+  vendor3_rank             String?   @db.Text
+  delivery_time1           String?   @db.Text
+  delivery_time2           String?   @db.Text
+  delivery_time3           String?   @db.Text
+  make1                    String?   @db.Text
+  make2                    String?   @db.Text
+  make3                    String?   @db.Text
+  indent_url               String?   @default("") @db.Text
+  accept_indent_url        String?   @default("") @db.Text
+  firm_id                  BigInt?
+  firm                     Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("indent")
 }
 
 model Inventory {
-  id                  BigInt @id @default(autoincrement())
-  timestamp           DateTime @db.Timestamp() @default(now())
-  group_head          String? @db.Text
-  item_name           String? @db.Text
-  uom                 String? @db.Text
-  max_level           String? @db.Text
-  opening             String? @db.Text
-  individual_rate     String? @db.Text
-  indented            Decimal? @default(0)
-  approved            Decimal?
-  purchase_quantity   Decimal?
-  out_quantity        Decimal?
-  current             Decimal?
-  total_price         Decimal?
-  color_code          String? @db.Text
-  received_quantity   Decimal?
-  return_quantity     Decimal?
-  request_quantity    Decimal?
-  firm_name           String? @db.Text
-  firm_id             BigInt?
-  firm                Firm? @relation(fields: [firm_id], references: [id])
+  id                BigInt   @id @default(autoincrement())
+  timestamp         DateTime @default(now()) @db.Timestamp()
+  group_head        String?  @db.Text
+  item_name         String?  @db.Text
+  uom               String?  @db.Text
+  max_level         String?  @db.Text
+  opening           String?  @db.Text
+  individual_rate   String?  @db.Text
+  indented          Decimal? @default(0)
+  approved          Decimal?
+  purchase_quantity Decimal?
+  out_quantity      Decimal?
+  current           Decimal?
+  total_price       Decimal?
+  color_code        String?  @db.Text
+  received_quantity Decimal?
+  return_quantity   Decimal?
+  request_quantity  Decimal?
+  firm_name         String?  @db.Text
+  firm_id           BigInt?
+  firm              Firm?    @relation(fields: [firm_id], references: [id])
+
   @@map("inventory")
 }
 
 model Issue {
-  id                    BigInt @id @default(autoincrement())
-  timestamp             DateTime @db.Timestamptz()
-  department            String? @db.Text
-  group_head            String? @db.Text
-  product_name          String? @db.Text
-  quantity              String? @db.Text
-  uom                   String? @db.Text
-  issue_to              String? @db.Text
-  planned1              DateTime? @db.Timestamp()
-  actual1               DateTime? @db.Timestamp()
-  time_delay1           String? @db.Text
-  status                String? @db.Text
-  given_qty             String? @db.Text
-  issue_no              String? @db.Text
-  constructor_name      String? @db.Text
-  site_location         String? @db.Text
-  firm_name             String? @db.Text
-  rejected_damage_qty   String? @db.Text
-  damage_remark         String? @db.Text
-  return_person_name    String? @db.Text
-  issue_person_name     String? @db.Text
-  issue_slip            String? @db.Text
-  return_slip           String? @db.Text
-  firm_id               BigInt?
-  firm                  Firm? @relation(fields: [firm_id], references: [id])
+  id                  BigInt    @id @default(autoincrement())
+  timestamp           DateTime  @db.Timestamptz()
+  department          String?   @db.Text
+  group_head          String?   @db.Text
+  product_name        String?   @db.Text
+  quantity            String?   @db.Text
+  uom                 String?   @db.Text
+  issue_to            String?   @db.Text
+  planned1            DateTime? @db.Timestamp()
+  actual1             DateTime? @db.Timestamp()
+  time_delay1         String?   @db.Text
+  status              String?   @db.Text
+  given_qty           String?   @db.Text
+  issue_no            String?   @db.Text
+  constructor_name    String?   @db.Text
+  site_location       String?   @db.Text
+  firm_name           String?   @db.Text
+  rejected_damage_qty String?   @db.Text
+  damage_remark       String?   @db.Text
+  return_person_name  String?   @db.Text
+  issue_person_name   String?   @db.Text
+  issue_slip          String?   @db.Text
+  return_slip         String?   @db.Text
+  firm_id             BigInt?
+  firm                Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("issue")
 }
 
 model Item {
-  id                          BigInt @id @default(autoincrement())
-  item_name                   String @db.Text
-  group_head_id               BigInt?
-  uom_id                      BigInt?
-  firm_id                     BigInt?
-  created_at                  DateTime @db.Timestamptz() @default(now())
-  regular_pay_condition       String? @db.Text
-  third_party_pay_condition   String? @db.Text
-  group_head                  GroupHead? @relation(fields: [group_head_id], references: [id])
-  uom                         Uom? @relation(fields: [uom_id], references: [id])
-  firm                        Firm? @relation(fields: [firm_id], references: [id])
+  id                        BigInt     @id @default(autoincrement())
+  item_name                 String     @db.Text
+  group_head_id             BigInt?
+  uom_id                    BigInt?
+  firm_id                   BigInt?
+  created_at                DateTime   @default(now()) @db.Timestamptz()
+  regular_pay_condition     String?    @db.Text
+  third_party_pay_condition String?    @db.Text
+  group_head                GroupHead? @relation(fields: [group_head_id], references: [id])
+  uom                       Uom?       @relation(fields: [uom_id], references: [id])
+  firm                      Firm?      @relation(fields: [firm_id], references: [id])
+
   @@map("item")
 }
 
 model Master {
-  created_at               DateTime @db.Timestamptz() @default(now())
-  vendor_name              String? @db.Text
-  vendor_gstin             String? @db.Text
-  vendor_address           String? @db.Text
-  vendor_email             String? @db.Text
-  payment_term             String? @db.Text
-  department               String? @db.Text
-  group_head               String? @db.Text
-  item_name                String? @db.Text
-  company_name             String? @db.Text
-  company_address          String? @db.Text
-  company_email            String? @db.Text
-  company_gstin            String? @db.Text
-  company_phone            String? @db.Text
-  billing_address          String? @db.Text
-  company_pan              String? @db.Text
-  destination_address      String? @db.Text
-  default_terms            String? @db.Text
-  person_name              String? @db.Text
-  firm_name                String? @db.Text
-  uom                      String? @db.Text
-  where                    String? @db.Text
-  fms_name                 String? @db.Text
-  indenter_name            String? @db.Text
-  id                       BigInt @id @default(autoincrement())
-  responsible_person       String? @db.Text
-  regular                  String? @db.Text
-  location                 String? @db.Text
-  phone                    String? @db.Text
-  regular_conditions       String? @db.Text
-  third_party_conditions   String? @db.Text
-  area_of_use              String? @db.Text
-  company_contact_person   String? @db.Text
+  created_at             DateTime @default(now()) @db.Timestamptz()
+  vendor_name            String?  @db.Text
+  vendor_gstin           String?  @db.Text
+  vendor_address         String?  @db.Text
+  vendor_email           String?  @db.Text
+  payment_term           String?  @db.Text
+  department             String?  @db.Text
+  group_head             String?  @db.Text
+  item_name              String?  @db.Text
+  company_name           String?  @db.Text
+  company_address        String?  @db.Text
+  company_email          String?  @db.Text
+  company_gstin          String?  @db.Text
+  company_phone          String?  @db.Text
+  billing_address        String?  @db.Text
+  company_pan            String?  @db.Text
+  destination_address    String?  @db.Text
+  default_terms          String?  @db.Text
+  person_name            String?  @db.Text
+  firm_name              String?  @db.Text
+  uom                    String?  @db.Text
+  where                  String?  @db.Text
+  fms_name               String?  @db.Text
+  indenter_name          String?  @db.Text
+  id                     BigInt   @id @default(autoincrement())
+  responsible_person     String?  @db.Text
+  regular                String?  @db.Text
+  location               String?  @db.Text
+  phone                  String?  @db.Text
+  regular_conditions     String?  @db.Text
+  third_party_conditions String?  @db.Text
+  area_of_use            String?  @db.Text
+  company_contact_person String?  @db.Text
+
   @@map("master")
 }
 
 model PaymentHistory {
-  id                           BigInt @id @default(autoincrement())
-  timestamp                    DateTime @db.Timestamptz()
-  ap_payment_number            String? @db.Text
-  status                       String? @db.Text
-  unique_number                String? @db.Text
-  fms_name                     String? @db.Text
-  pay_to                       String? @db.Text
-  amount_to_be_paid            String? @db.Text
-  remarks                      String? @db.Text
-  any_attachments              String? @db.Text
-  timestamp1                   DateTime? @db.Timestamp()
-  lift_number                  String? @db.Text
-  indent_no                    String? @db.Text
-  po_number                    String? @db.Text
-  vendor_name                  String? @db.Text
-  product_name                 String? @db.Text
-  bill_status                  String? @db.Text
-  bill_no                      String? @db.Text
-  qty                          String? @db.Text
-  lead_time_to_lift_material   String? @db.Text
-  type_of_bill                 String? @db.Text
-  bill_amount                  String? @db.Text
-  discount_amount              String? @db.Text
-  payment_type                 String? @db.Text
-  advance_amount_if_any        String? @db.Text
-  photo_of_bill                String? @db.Text
-  transportation_include       String? @db.Text
-  transporter_name             String? @db.Text
-  amount                       String? @db.Text
-  vehicle_no                   String? @db.Text
-  driver_name                  String? @db.Text
-  driver_mobile_no             String? @db.Text
-  bill_remark                  String? @db.Text
-  planned                      DateTime? @db.Date
-  payment_terms                String? @db.Text
-  firm_id                      BigInt?
-  firm                         Firm? @relation(fields: [firm_id], references: [id])
+  id                         BigInt    @id @default(autoincrement())
+  timestamp                  DateTime  @db.Timestamptz()
+  ap_payment_number          String?   @db.Text
+  status                     String?   @db.Text
+  unique_number              String?   @db.Text
+  fms_name                   String?   @db.Text
+  pay_to                     String?   @db.Text
+  amount_to_be_paid          String?   @db.Text
+  remarks                    String?   @db.Text
+  any_attachments            String?   @db.Text
+  timestamp1                 DateTime? @db.Timestamp()
+  lift_number                String?   @db.Text
+  indent_no                  String?   @db.Text
+  po_number                  String?   @db.Text
+  vendor_name                String?   @db.Text
+  product_name               String?   @db.Text
+  bill_status                String?   @db.Text
+  bill_no                    String?   @db.Text
+  qty                        String?   @db.Text
+  lead_time_to_lift_material String?   @db.Text
+  type_of_bill               String?   @db.Text
+  bill_amount                String?   @db.Text
+  discount_amount            String?   @db.Text
+  payment_type               String?   @db.Text
+  advance_amount_if_any      String?   @db.Text
+  photo_of_bill              String?   @db.Text
+  transportation_include     String?   @db.Text
+  transporter_name           String?   @db.Text
+  amount                     String?   @db.Text
+  vehicle_no                 String?   @db.Text
+  driver_name                String?   @db.Text
+  driver_mobile_no           String?   @db.Text
+  bill_remark                String?   @db.Text
+  planned                    DateTime? @db.Date
+  payment_terms              String?   @db.Text
+  firm_id                    BigInt?
+  firm                       Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("payment_history")
 }
 
 model Payments {
-  id                   BigInt @id @default(autoincrement())
-  timestamp            DateTime? @db.Timestamptz()
-  unique_no            String? @db.Text
-  party_name           String? @db.Text
-  po_number            String? @db.Text
-  total_po_amount      String? @db.Text
-  internal_code        String? @db.Text
-  product              String? @db.Text
-  delivery_date        DateTime? @db.Date
-  payment_terms        String? @db.Text
-  number_of_days       String? @db.Text
-  pdf                  String? @db.Text
-  pay_amount           String? @db.Text
-  file                 String? @db.Text
-  remark               String? @db.Text
-  total_paid_amount    String? @db.Text
-  outstanding_amount   String? @db.Text
-  status               String? @db.Text
-  planned              DateTime? @db.Date
-  actual               DateTime? @db.Date
-  type_of_bill         String? @db.Text
-  status1              String? @db.Text
-  payment_form         String? @db.Text
-  firm_name            String? @db.Text
-  payment_done         Boolean?
-  firm_id              BigInt?
-  firm                 Firm? @relation(fields: [firm_id], references: [id])
+  id                 BigInt    @id @default(autoincrement())
+  timestamp          DateTime? @db.Timestamptz()
+  unique_no          String?   @db.Text
+  party_name         String?   @db.Text
+  po_number          String?   @db.Text
+  total_po_amount    String?   @db.Text
+  internal_code      String?   @db.Text
+  product            String?   @db.Text
+  delivery_date      DateTime? @db.Date
+  payment_terms      String?   @db.Text
+  number_of_days     String?   @db.Text
+  pdf                String?   @db.Text
+  pay_amount         String?   @db.Text
+  file               String?   @db.Text
+  remark             String?   @db.Text
+  total_paid_amount  String?   @db.Text
+  outstanding_amount String?   @db.Text
+  status             String?   @db.Text
+  planned            DateTime? @db.Date
+  actual             DateTime? @db.Date
+  type_of_bill       String?   @db.Text
+  status1            String?   @db.Text
+  payment_form       String?   @db.Text
+  firm_name          String?   @db.Text
+  payment_done       Boolean?
+  firm_id            BigInt?
+  firm               Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("payments")
 }
 
 model PcReport {
-  id                   BigInt @id @default(autoincrement())
-  created_at           DateTime @db.Timestamptz() @default(now())
-  stage                String? @db.Text
-  total_pending        String? @db.Text
-  total_complete       String? @db.Text
-  pending_pmpl         String? @db.Text
-  pending_purab        String? @db.Text
-  pending_pmmpl        String? @db.Text
-  pending_refrasynth   String? @db.Text
-  updated_at           DateTime? @db.Timestamptz() @default(now())
+  id                 BigInt    @id @default(autoincrement())
+  created_at         DateTime  @default(now()) @db.Timestamptz()
+  stage              String?   @db.Text
+  total_pending      String?   @db.Text
+  total_complete     String?   @db.Text
+  pending_pmpl       String?   @db.Text
+  pending_purab      String?   @db.Text
+  pending_pmmpl      String?   @db.Text
+  pending_refrasynth String?   @db.Text
+  updated_at         DateTime? @default(now()) @db.Timestamptz()
+
   @@map("pc_report")
 }
 
 model PoMaster {
-  id                      BigInt @id @default(autoincrement())
+  id                      BigInt   @id @default(autoincrement())
   timestamp               DateTime @db.Timestamptz()
-  party_name              String? @db.Text
-  po_number               String? @db.Text
-  quotation_number        String? @db.Text
-  quotation_date          String? @db.Text
-  enquiry_number          String? @db.Text
-  enquiry_date            String? @db.Text
-  internal_code           String? @db.Text
-  product                 String? @db.Text
-  description             String? @db.Text
-  quantity                String? @db.Text
-  unit                    String? @db.Text
-  rate                    String? @db.Text
-  gst                     String? @db.Text
-  discount                String? @db.Text
-  amount                  String? @db.Text
-  total_po_amount         String? @db.Text
-  prepared_by             String? @db.Text
-  approved_by             String? @db.Text
-  pdf                     String? @db.Text
-  delivery_date           String? @db.Text
-  payment_terms           String? @db.Text
-  number_of_days          String? @db.Text
-  term1                   String? @db.Text
-  term2                   String? @db.Text
-  term3                   String? @db.Text
-  term4                   String? @db.Text
-  term5                   String? @db.Text
-  term6                   String? @db.Text
-  term7                   String? @db.Text
-  term8                   String? @db.Text
-  term9                   String? @db.Text
-  term10                  String? @db.Text
-  email_send_status       String? @db.Text
-  delivery_days           String? @db.Text
-  delivery_type           String? @db.Text
-  firm_name               String? @db.Text
+  party_name              String?  @db.Text
+  po_number               String?  @db.Text
+  quotation_number        String?  @db.Text
+  quotation_date          String?  @db.Text
+  enquiry_number          String?  @db.Text
+  enquiry_date            String?  @db.Text
+  internal_code           String?  @db.Text
+  product                 String?  @db.Text
+  description             String?  @db.Text
+  quantity                String?  @db.Text
+  unit                    String?  @db.Text
+  rate                    String?  @db.Text
+  gst                     String?  @db.Text
+  discount                String?  @db.Text
+  amount                  String?  @db.Text
+  total_po_amount         String?  @db.Text
+  prepared_by             String?  @db.Text
+  approved_by             String?  @db.Text
+  pdf                     String?  @db.Text
+  delivery_date           String?  @db.Text
+  payment_terms           String?  @db.Text
+  number_of_days          String?  @db.Text
+  term1                   String?  @db.Text
+  term2                   String?  @db.Text
+  term3                   String?  @db.Text
+  term4                   String?  @db.Text
+  term5                   String?  @db.Text
+  term6                   String?  @db.Text
+  term7                   String?  @db.Text
+  term8                   String?  @db.Text
+  term9                   String?  @db.Text
+  term10                  String?  @db.Text
+  email_send_status       String?  @db.Text
+  delivery_days           String?  @db.Text
+  delivery_type           String?  @db.Text
+  firm_name               String?  @db.Text
   total_paid_amount       Decimal?
   outstanding_amount      Decimal?
-  status                  String? @db.Text
-  company_email           String? @db.Text
+  status                  String?  @db.Text
+  company_email           String?  @db.Text
   advance_percent         Decimal? @default(0)
   advance_amount          Decimal? @default(0)
-  terms                   String? @db.Text
-  destination_address     String? @db.Text
-  site_engineer_name      String? @db.Text
-  site_engineer_email     String? @db.Text
-  site_engineer_phoneNo   String? @db.Text
-  site_engineer_name_2    String? @db.Text
-  site_engineer_email_2   String? @db.Text
-  site_engineer_phoneNo_2 String? @db.Text
+  terms                   String?  @db.Text
+  destination_address     String?  @db.Text
+  site_engineer_name      String?  @db.Text
+  site_engineer_email     String?  @db.Text
+  site_engineer_phoneNo   String?  @db.Text
+  site_engineer_name_2    String?  @db.Text
+  site_engineer_email_2   String?  @db.Text
+  site_engineer_phoneNo_2 String?  @db.Text
   firm_id                 BigInt?
-  firm                    Firm? @relation(fields: [firm_id], references: [id])
+  firm                    Firm?    @relation(fields: [firm_id], references: [id])
+
   @@map("po_master")
 }
 
 model QuotationHistory {
-  id               BigInt @id @default(autoincrement())
-  created_at       DateTime? @db.Timestamptz() @default(now())
-  timestamp        DateTime? @db.Timestamptz() @default(now())
-  quatationNo      String @db.Text
-  supplierName     String @db.Text
-  adreess          String? @db.Text
-  gst              String? @db.Text
-  indentNo         String @db.Text
-  product          String @db.Text
-  description      String? @db.Text
-  qty              String? @db.Text
-  unit             String? @db.Text
-  pdfLink          String? @db.Text
-  firm             String? @db.Text @default("N/A")
-  token            String?
-  vendor_rate      Decimal?
-  responded_at     DateTime? @db.Timestamptz()
-  vendor_remarks   String? @db.Text
-  firm_id          BigInt?
-  firm_rel         Firm? @relation(fields: [firm_id], references: [id])
+  id             BigInt    @id @default(autoincrement())
+  created_at     DateTime? @default(now()) @db.Timestamptz()
+  timestamp      DateTime? @default(now()) @db.Timestamptz()
+  quatationNo    String    @db.Text
+  supplierName   String    @db.Text
+  adreess        String?   @db.Text
+  gst            String?   @db.Text
+  indentNo       String    @db.Text
+  product        String    @db.Text
+  description    String?   @db.Text
+  qty            String?   @db.Text
+  unit           String?   @db.Text
+  pdfLink        String?   @db.Text
+  firm           String?   @default("N/A") @db.Text
+  token          String?
+  vendor_rate    Decimal?
+  responded_at   DateTime? @db.Timestamptz()
+  vendor_remarks String?   @db.Text
+  firm_id        BigInt?
+  firm_rel       Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("quotation_history")
 }
 
 model Received {
-  id                    BigInt @id @default(autoincrement())
-  timestamp             DateTime @db.Timestamptz() @default(now())
-  indent_number         String? @db.Text
-  po_date               String? @db.Text
-  po_number             String? @db.Text
-  vendor                String? @db.Text
-  received_status       String? @db.Text
-  received_quantity     String? @db.Text
-  uom                   String? @db.Text
-  photo_of_product      String? @db.Text
-  warranty_status       String? @db.Text
-  end_date              String? @db.Text
-  bill_status           String? @db.Text
-  bill_number           String? @db.Text
-  bill_amount           String? @db.Text
-  photo_of_bill         String? @db.Text
-  any_transportations   String? @db.Text
-  transporter_name      String? @db.Text
-  transporting_amount   String? @db.Text
+  id                  BigInt   @id @default(autoincrement())
+  timestamp           DateTime @default(now()) @db.Timestamptz()
+  indent_number       String?  @db.Text
+  po_date             String?  @db.Text
+  po_number           String?  @db.Text
+  vendor              String?  @db.Text
+  received_status     String?  @db.Text
+  received_quantity   String?  @db.Text
+  uom                 String?  @db.Text
+  photo_of_product    String?  @db.Text
+  warranty_status     String?  @db.Text
+  end_date            String?  @db.Text
+  bill_status         String?  @db.Text
+  bill_number         String?  @db.Text
+  bill_amount         String?  @db.Text
+  photo_of_bill       String?  @db.Text
+  any_transportations String?  @db.Text
+  transporter_name    String?  @db.Text
+  transporting_amount String?  @db.Text
+
   @@map("received")
 }
 
 model SiteEngineerDetails {
-  id     Int @id @default(autoincrement())
-  name   String @db.Text
-  number String @db.Text
+  id     Int     @id @default(autoincrement())
+  name   String  @db.Text
+  number String  @db.Text
   email  String? @db.Text
+
   @@map("site_engineer_details")
 }
 
 model SiteLocationDetails {
-  id           BigInt @id @default(autoincrement())
-  created_at   DateTime? @db.Timestamptz() @default(now())
-  location     String @db.Text
+  id         BigInt    @id @default(autoincrement())
+  created_at DateTime? @default(now()) @db.Timestamptz()
+  location   String    @db.Text
+
   @@map("site_location_details")
 }
 
 model Stock {
-  id              BigInt @id @default(autoincrement())
-  timestamp       DateTime @db.Timestamptz() @default(now())
-  serial_number   String? @db.Text
-  group_head      String? @db.Text
-  product_name    String? @db.Text
-  uom             String? @db.Text
-  opening         Decimal?
-  min_level       Decimal?
-  latest_price    Decimal?
-  intransit       Decimal?
-  received        Decimal?
-  consumed        Decimal?
-  current_stock   Decimal?
-  value           Decimal?
-  required        Decimal?
-  condition       String? @db.Text
+  id            BigInt   @id @default(autoincrement())
+  timestamp     DateTime @default(now()) @db.Timestamptz()
+  serial_number String?  @db.Text
+  group_head    String?  @db.Text
+  product_name  String?  @db.Text
+  uom           String?  @db.Text
+  opening       Decimal?
+  min_level     Decimal?
+  latest_price  Decimal?
+  intransit     Decimal?
+  received      Decimal?
+  consumed      Decimal?
+  current_stock Decimal?
+  value         Decimal?
+  required      Decimal?
+  condition     String?  @db.Text
+
   @@map("stock")
 }
 
 model StockTransfers {
-  id             BigInt @id @default(autoincrement())
-  timestamp      DateTime? @db.Timestamptz() @default(now())
-  transfer_no    String @db.Text
-  from_project   String @db.Text
-  to_project     String @db.Text
-  product_name   String @db.Text
-  uom            String? @db.Text
-  group_head     String? @db.Text
-  quantity       Decimal
-  remark         String? @db.Text @default("Internal Stock Transfer")
-  status         String? @db.Text @default("Approved")
-  from_firm_id   BigInt?
-  to_firm_id     BigInt?
-  from_firm      Firm? @relation("from_firm_id", fields: [from_firm_id], references: [id])
-  to_firm        Firm? @relation("to_firm_id", fields: [to_firm_id], references: [id])
+  id           BigInt    @id @default(autoincrement())
+  timestamp    DateTime? @default(now()) @db.Timestamptz()
+  transfer_no  String    @db.Text
+  from_project String    @db.Text
+  to_project   String    @db.Text
+  product_name String    @db.Text
+  uom          String?   @db.Text
+  group_head   String?   @db.Text
+  quantity     Decimal
+  remark       String?   @default("Internal Stock Transfer") @db.Text
+  status       String?   @default("Approved") @db.Text
+  from_firm_id BigInt?
+  to_firm_id   BigInt?
+  from_firm    Firm?     @relation("from_firm_id", fields: [from_firm_id], references: [id])
+  to_firm      Firm?     @relation("to_firm_id", fields: [to_firm_id], references: [id])
+
   @@map("stock_transfers")
 }
 
 model StoreIn {
-  id                           BigInt @id @default(autoincrement())
-  timestamp                    DateTime @db.Timestamptz()
-  lift_number                  String? @db.Text
-  indent_no                    String? @db.Text
-  po_number                    String? @db.Text
-  vendor_name                  String? @db.Text
-  product_name                 String? @db.Text
-  bill_status                  String? @db.Text
-  bill_no                      String? @db.Text
-  qty                          String? @db.Text
-  lead_time_to_lift_material   String? @db.Text
-  type_of_bill                 String? @db.Text
-  bill_amount                  String? @db.Text
-  discount_amount              String? @db.Text
-  payment_type                 String? @db.Text
-  advance_amount_if_any        String? @db.Text
-  photo_of_bill                String? @db.Text
-  transportation_include       String? @db.Text
-  transporter_name             String? @db.Text
-  amount                       String? @db.Text
-  vehicle_no                   String? @db.Text
-  driver_name                  String? @db.Text
-  driver_mobile_no             String? @db.Text
-  bill_remark                  String? @db.Text
-  planned6                     DateTime? @db.Timestamp()
-  actual6                      DateTime? @db.Timestamp()
-  time_delay6                  String? @db.Text
-  receiving_status             String? @db.Text
-  received_quantity            String? @db.Text
-  photo_of_product             String? @db.Text
-  damage_order                 String? @db.Text
-  quantity_as_per_bill         String? @db.Text
-  remark                       String? @db.Text
-  planned7                     DateTime? @db.Timestamp()
-  actual7                      DateTime? @db.Timestamp()
-  time_delay7                  String? @db.Text
-  status                       String? @db.Text
-  bill_copy_attached           String? @db.Text
-  reason                       String? @db.Text
-  send_debit_note              String? @db.Text
-  planned9                     DateTime? @db.Timestamp()
-  actual9                      DateTime? @db.Timestamp()
-  time_delay9                  String? @db.Text
-  debit_note_copy              String? @db.Text
-  debit_note_number            String? @db.Text
-  firm_name                    String? @db.Text
-  lifting_status               String? @db.Text
-  planned11                    DateTime? @db.Timestamp()
-  actual11                     DateTime? @db.Timestamp()
-  time_delay                   String? @db.Text
-  bill_status_new              String? @db.Text
-  bill_image_status            String? @db.Text
-  indent_date                  String? @db.Text
-  indent_qty                   String? @db.Text
-  purchase_date                String? @db.Text
-  material_date                String? @db.Text
-  party_name                   String? @db.Text
-  location                     String? @db.Text
-  area                         String? @db.Text
-  not_bill_received_no         String? @db.Text
-  indented_for                 String? @db.Text
-  approved_party_name          String? @db.Text
-  rate                         String? @db.Text
-  total_rate                   String? @db.Text
-  bill_received2               String? @db.Text
-  price_as_per_po_check        String? @db.Text
-  hod_status                   String? @db.Text
-  hod_remark                   String? @db.Text
-  hod_planned                  DateTime? @db.Timestamptz()
-  hod_actual                   DateTime? @db.Timestamptz()
-  challan_no                   String? @db.Text
-  challan_image                String? @db.Text
-  receiver_name                String? @db.Text
-  firm_name_match              String? @db.Text
-  firm_id                      BigInt?
-  firm                         Firm? @relation(fields: [firm_id], references: [id])
+  id                         BigInt    @id @default(autoincrement())
+  timestamp                  DateTime  @db.Timestamptz()
+  lift_number                String?   @db.Text
+  indent_no                  String?   @db.Text
+  po_number                  String?   @db.Text
+  vendor_name                String?   @db.Text
+  product_name               String?   @db.Text
+  bill_status                String?   @db.Text
+  bill_no                    String?   @db.Text
+  qty                        String?   @db.Text
+  lead_time_to_lift_material String?   @db.Text
+  type_of_bill               String?   @db.Text
+  bill_amount                String?   @db.Text
+  discount_amount            String?   @db.Text
+  payment_type               String?   @db.Text
+  advance_amount_if_any      String?   @db.Text
+  photo_of_bill              String?   @db.Text
+  transportation_include     String?   @db.Text
+  transporter_name           String?   @db.Text
+  amount                     String?   @db.Text
+  vehicle_no                 String?   @db.Text
+  driver_name                String?   @db.Text
+  driver_mobile_no           String?   @db.Text
+  bill_remark                String?   @db.Text
+  planned6                   DateTime? @db.Timestamp()
+  actual6                    DateTime? @db.Timestamp()
+  time_delay6                String?   @db.Text
+  receiving_status           String?   @db.Text
+  received_quantity          String?   @db.Text
+  photo_of_product           String?   @db.Text
+  damage_order               String?   @db.Text
+  quantity_as_per_bill       String?   @db.Text
+  remark                     String?   @db.Text
+  planned7                   DateTime? @db.Timestamp()
+  actual7                    DateTime? @db.Timestamp()
+  time_delay7                String?   @db.Text
+  status                     String?   @db.Text
+  bill_copy_attached         String?   @db.Text
+  reason                     String?   @db.Text
+  send_debit_note            String?   @db.Text
+  planned9                   DateTime? @db.Timestamp()
+  actual9                    DateTime? @db.Timestamp()
+  time_delay9                String?   @db.Text
+  debit_note_copy            String?   @db.Text
+  debit_note_number          String?   @db.Text
+  firm_name                  String?   @db.Text
+  lifting_status             String?   @db.Text
+  planned11                  DateTime? @db.Timestamp()
+  actual11                   DateTime? @db.Timestamp()
+  time_delay                 String?   @db.Text
+  bill_status_new            String?   @db.Text
+  bill_image_status          String?   @db.Text
+  indent_date                String?   @db.Text
+  indent_qty                 String?   @db.Text
+  purchase_date              String?   @db.Text
+  material_date              String?   @db.Text
+  party_name                 String?   @db.Text
+  location                   String?   @db.Text
+  area                       String?   @db.Text
+  not_bill_received_no       String?   @db.Text
+  indented_for               String?   @db.Text
+  approved_party_name        String?   @db.Text
+  rate                       String?   @db.Text
+  total_rate                 String?   @db.Text
+  bill_received2             String?   @db.Text
+  price_as_per_po_check      String?   @db.Text
+  hod_status                 String?   @db.Text
+  hod_remark                 String?   @db.Text
+  hod_planned                DateTime? @db.Timestamptz()
+  hod_actual                 DateTime? @db.Timestamptz()
+  challan_no                 String?   @db.Text
+  challan_image              String?   @db.Text
+  receiver_name              String?   @db.Text
+  firm_name_match            String?   @db.Text
+  firm_id                    BigInt?
+  firm                       Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("store_in")
 }
 
 model StoreInDirect {
-  id                       String @id @default(uuid())
-  lift_number              String? @db.Text
-  indent_no                String? @db.Text
-  receiver_name            String @db.Text
-  vendor_name              String @db.Text
-  bill_no                  String? @db.Text
-  bill_amount              Decimal? @default(0)
-  product_name             String @db.Text
-  qty                      Decimal? @default(0)
-  receiving_status         String? @db.Text @default("Received")
-  received_quantity        Decimal? @default(0)
-  photo_of_bill            String? @db.Text
-  photo_of_product         String? @db.Text
-  transportation_include   String? @db.Text @default("No")
-  transporter_name         String? @db.Text
-  amount                   Decimal? @default(0)
-  vehicle_no               String? @db.Text
-  firm_name_match          String? @db.Text
-  timestamp                DateTime? @db.Timestamptz()
-  actual6                  DateTime? @db.Timestamptz()
-  hod_status               String? @db.Text
-  created_at               DateTime? @db.Timestamptz()
-  firm_id                  BigInt?
-  firm_name                String? @db.Text
-  firm                     Firm? @relation(fields: [firm_id], references: [id])
+  id                     String    @id @default(uuid())
+  lift_number            String?   @db.Text
+  indent_no              String?   @db.Text
+  receiver_name          String    @db.Text
+  vendor_name            String    @db.Text
+  bill_no                String?   @db.Text
+  bill_amount            Decimal?  @default(0)
+  product_name           String    @db.Text
+  qty                    Decimal?  @default(0)
+  receiving_status       String?   @default("Received") @db.Text
+  received_quantity      Decimal?  @default(0)
+  photo_of_bill          String?   @db.Text
+  photo_of_product       String?   @db.Text
+  transportation_include String?   @default("No") @db.Text
+  transporter_name       String?   @db.Text
+  amount                 Decimal?  @default(0)
+  vehicle_no             String?   @db.Text
+  firm_name_match        String?   @db.Text
+  timestamp              DateTime? @db.Timestamptz()
+  actual6                DateTime? @db.Timestamptz()
+  hod_status             String?   @db.Text
+  created_at             DateTime? @db.Timestamptz()
+  firm_id                BigInt?
+  firm_name              String?   @db.Text
+  firm                   Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("store_in_direct")
 }
 
 model TallyEntry {
-  id                    BigInt @id @default(autoincrement())
-  timestamp             DateTime @db.Timestamp()
-  lift_number           String? @db.Text
-  indent_number         String? @db.Text
-  po_number             String? @db.Text
-  material_in_date      String? @db.Text
-  product_name          String? @db.Text
-  bill_status           String? @db.Text
-  qty                   String? @db.Text
-  party_name            String? @db.Text
-  bill_amt              String? @db.Text
-  bill_image            String? @db.Text
-  bill_no               String? @db.Text
-  location              String? @db.Text
-  type_of_bills         String? @db.Text
-  product_image         String? @db.Text
-  area                  String? @db.Text
-  indented_for          String? @db.Text
-  approved_party_name   String? @db.Text
-  rate                  String? @db.Text
-  indent_qty            String? @db.Text
-  total_rate            String? @db.Text
-  bill_recieved_later   String? @db.Text
-  planned1              DateTime? @db.Timestamp()
-  actual1               DateTime? @db.Timestamp()
-  delay1                String? @db.Text
-  status1               String? @db.Text
-  firm_name             String? @db.Text
-  remarks1              String? @db.Text
-  planned2              DateTime? @db.Timestamp()
-  actual2               DateTime? @db.Timestamp()
-  delay2                String? @db.Text
-  status2               String? @db.Text
-  remarks2              String? @db.Text
-  planned3              DateTime? @db.Timestamp()
-  actual3               DateTime? @db.Timestamp()
-  delay3                String? @db.Text
-  status3               String? @db.Text
-  remarks3              String? @db.Text
-  planned4              DateTime? @db.Timestamp()
-  actual4               DateTime? @db.Timestamp()
-  delay4                String? @db.Text
-  status4               String? @db.Text
-  remarks4              String? @db.Text
-  planned5              DateTime? @db.Timestamp()
-  actual5               DateTime? @db.Timestamp()
-  delay5                String? @db.Text
-  status5               String? @db.Text
-  remarks5              String? @db.Text
-  firm_name_match       String? @db.Text
-  firm_id               BigInt?
-  firm                  Firm? @relation(fields: [firm_id], references: [id])
+  id                  BigInt    @id @default(autoincrement())
+  timestamp           DateTime  @db.Timestamp()
+  lift_number         String?   @db.Text
+  indent_number       String?   @db.Text
+  po_number           String?   @db.Text
+  material_in_date    String?   @db.Text
+  product_name        String?   @db.Text
+  bill_status         String?   @db.Text
+  qty                 String?   @db.Text
+  party_name          String?   @db.Text
+  bill_amt            String?   @db.Text
+  bill_image          String?   @db.Text
+  bill_no             String?   @db.Text
+  location            String?   @db.Text
+  type_of_bills       String?   @db.Text
+  product_image       String?   @db.Text
+  area                String?   @db.Text
+  indented_for        String?   @db.Text
+  approved_party_name String?   @db.Text
+  rate                String?   @db.Text
+  indent_qty          String?   @db.Text
+  total_rate          String?   @db.Text
+  bill_recieved_later String?   @db.Text
+  planned1            DateTime? @db.Timestamp()
+  actual1             DateTime? @db.Timestamp()
+  delay1              String?   @db.Text
+  status1             String?   @db.Text
+  firm_name           String?   @db.Text
+  remarks1            String?   @db.Text
+  planned2            DateTime? @db.Timestamp()
+  actual2             DateTime? @db.Timestamp()
+  delay2              String?   @db.Text
+  status2             String?   @db.Text
+  remarks2            String?   @db.Text
+  planned3            DateTime? @db.Timestamp()
+  actual3             DateTime? @db.Timestamp()
+  delay3              String?   @db.Text
+  status3             String?   @db.Text
+  remarks3            String?   @db.Text
+  planned4            DateTime? @db.Timestamp()
+  actual4             DateTime? @db.Timestamp()
+  delay4              String?   @db.Text
+  status4             String?   @db.Text
+  remarks4            String?   @db.Text
+  planned5            DateTime? @db.Timestamp()
+  actual5             DateTime? @db.Timestamp()
+  delay5              String?   @db.Text
+  status5             String?   @db.Text
+  remarks5            String?   @db.Text
+  firm_name_match     String?   @db.Text
+  firm_id             BigInt?
+  firm                Firm?     @relation(fields: [firm_id], references: [id])
+
   @@map("tally_entry")
 }
 
 model TermsAndCondition {
-  name         String @db.Text
-  created_at   DateTime? @db.Timestamptz() @default(now())
-  title        String? @db.Text
-  id           BigInt @id @default(autoincrement())
+  name       String    @db.Text
+  created_at DateTime? @default(now()) @db.Timestamptz()
+  title      String?   @db.Text
+  id         BigInt    @id @default(autoincrement())
+
   @@map("terms_and_condition")
 }
 
 model Uom {
-  id           BigInt @id @default(autoincrement())
-  name         String? @db.Text
-  created_at   DateTime @db.Timestamptz() @default(now())
-  item         Item[]
+  id         BigInt   @id @default(autoincrement())
+  name       String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+  item       Item[]
+
   @@map("uom")
 }
 
 model User {
-  id                                          BigInt @id @default(autoincrement())
-  timestamp                                   DateTime @db.Timestamptz() @default(now())
-  user_name                                   String? @db.Text
-  password                                    String? @db.Text
-  name                                        String? @db.Text
-  administrate                                Boolean?
-  store_issue                                 Boolean?
-  issue_data                                  Boolean?
-  inventory                                   Boolean?
-  create_indent                               Boolean?
-  create_po                                   Boolean?
-  indent_approval_view                        Boolean?
-  indent_approval_action                      Boolean?
-  update_vendor_view                          Boolean?
-  update_vendor_action                        Boolean?
-  three_party_approval_view                   Boolean?
-  three_party_approval_action                 Boolean?
-  receive_item_view                           Boolean?
-  receive_item_action                         Boolean?
-  store_out_approval_view                     Boolean?
-  store_out_approval_action                   Boolean?
-  pending_indents_view                        Boolean?
-  orders_view                                 Boolean?
-  again_auditing                              Boolean?
-  take_entry_by_telly                         Boolean?
-  reaudit_data                                Boolean?
-  rectify_the_mistake                         Boolean?
-  audit_data                                  Boolean?
-  send_debit_note                             Boolean?
-  return_material_to_party                    Boolean?
-  exchange_materials                          Boolean?
-  instead_of_quality_check_in_received_item   Boolean?
-  db_for_pc                                   Boolean?
-  bill_not_received                           Boolean?
-  store_in                                    Boolean?
-  po_history                                  Boolean?
-  full_kiting                                 Boolean?
-  make_payment                                Boolean?
-  pending_po                                  Boolean?
-  hod_store_approval                          Boolean?
-  firm_access                                 BigInt[]
-  store_issue_return                          Boolean?
-  modify_access                               AccessType
+  id                                        BigInt     @id @default(autoincrement())
+  timestamp                                 DateTime   @default(now()) @db.Timestamptz()
+  user_name                                 String?    @db.Text
+  password                                  String?    @db.Text
+  name                                      String?    @db.Text
+  administrate                              Boolean?
+  store_issue                               Boolean?
+  issue_data                                Boolean?
+  inventory                                 Boolean?
+  create_indent                             Boolean?
+  create_po                                 Boolean?
+  indent_approval_view                      Boolean?
+  indent_approval_action                    Boolean?
+  update_vendor_view                        Boolean?
+  update_vendor_action                      Boolean?
+  three_party_approval_view                 Boolean?
+  three_party_approval_action               Boolean?
+  receive_item_view                         Boolean?
+  receive_item_action                       Boolean?
+  store_out_approval_view                   Boolean?
+  store_out_approval_action                 Boolean?
+  pending_indents_view                      Boolean?
+  orders_view                               Boolean?
+  again_auditing                            Boolean?
+  take_entry_by_telly                       Boolean?
+  reaudit_data                              Boolean?
+  rectify_the_mistake                       Boolean?
+  audit_data                                Boolean?
+  send_debit_note                           Boolean?
+  return_material_to_party                  Boolean?
+  exchange_materials                        Boolean?
+  instead_of_quality_check_in_received_item Boolean?
+  db_for_pc                                 Boolean?
+  bill_not_received                         Boolean?
+  store_in                                  Boolean?
+  po_history                                Boolean?
+  full_kiting                               Boolean?
+  make_payment                              Boolean?
+  pending_po                                Boolean?
+  hod_store_approval                        Boolean?
+  firm_access                               BigInt[]
+  store_issue_return                        Boolean?
+  modify_access                             AccessType
+  role                                      Role?      @default(USER)
+  day_off                                   String?    @db.Text
+
   @@map("user")
 }
 
+model ChecklistTask {
+  task_id                     BigInt      @id @default(autoincrement())
+  firm_id                     BigInt?
+  firm_name                   String?     @db.Text
+  doer_id                     BigInt?
+  doer_name                   String?     @db.Text
+  given_by_id                 BigInt?
+  given_by_name               String?     @db.Text
+  task_description            String?     @db.Text
+  frequency                   String?     @db.Text
+  enable_reminder             Boolean?    @default(false)
+  reminder_days_before        Int?        @default(1)
+  early_reminder_sent         Boolean?    @default(false)
+  require_attachment          Boolean?    @default(false)
+  duration                    String?     @db.Text
+  planned_date                DateTime?   @db.Timestamp()
+  task_start_date             DateTime?   @db.Timestamp()
+  submission_date             DateTime?   @db.Timestamp()
+  status                      TaskStatus? @default(pending)
+  remark                      String?     @db.Text
+  image                       String?     @db.Text
+  audio_url                   String?     @db.Text
+  instruction_attachment_url  String?     @db.Text
+  instruction_attachment_type String?     @db.Text
+  delay                       String?     @db.Text
+  admin_done                  Boolean?    @default(false)
+  admin_approved_by           BigInt?
+  admin_approval_date         DateTime?   @db.Timestamptz()
+  created_at                  DateTime    @default(now()) @db.Timestamptz()
+  firm                        Firm?       @relation(fields: [firm_id], references: [id])
+
+  @@map("checklist_task")
+}
+
+model DelegationTask {
+  task_id                     BigInt           @id @default(autoincrement())
+  firm_id                     BigInt?
+  firm_name                   String?          @db.Text
+  doer_id                     BigInt?
+  doer_name                   String?          @db.Text
+  given_by_id                 BigInt?
+  given_by_name               String?          @db.Text
+  task_description            String?          @db.Text
+  require_attachment          Boolean?         @default(false)
+  duration                    String?          @db.Text
+  task_start_date             DateTime         @db.Timestamp()
+  planned_date                DateTime?        @db.Timestamp()
+  submission_date             DateTime?        @db.Timestamp()
+  status                      TaskStatus?      @default(pending)
+  remark                      String?          @db.Text
+  image                       String?          @db.Text
+  audio_url                   String?          @db.Text
+  instruction_attachment_url  String?          @db.Text
+  instruction_attachment_type String?          @db.Text
+  delay                       String?          @db.Text
+  admin_done                  Boolean?         @default(false)
+  admin_approved_by           BigInt?
+  admin_approval_date         DateTime?        @db.Timestamptz()
+  created_at                  DateTime         @default(now()) @db.Timestamptz()
+  updated_at                  DateTime?        @updatedAt @db.Timestamptz()
+  done_history                DelegationDone[]
+  firm                        Firm?            @relation(fields: [firm_id], references: [id])
+
+  @@map("delegation_task")
+}
+
+model DelegationDone {
+  id                  BigInt          @id @default(autoincrement())
+  task_id             BigInt?
+  status              TaskStatus?
+  next_extend_date    DateTime?       @db.Timestamp()
+  reason              String?         @db.Text
+  image_url           String?         @db.Text
+  audio_url           String?         @db.Text
+  duration            String?         @db.Text
+  admin_done          Boolean?        @default(false)
+  admin_approved_by   BigInt?
+  admin_approval_date DateTime?       @db.Timestamptz()
+  created_at          DateTime        @default(now()) @db.Timestamptz()
+  task                DelegationTask? @relation(fields: [task_id], references: [task_id])
+
+  @@map("delegation_done")
+}
+
+model Holiday {
+  id           BigInt   @id @default(autoincrement())
+  holiday_date DateTime @unique @db.Date
+  holiday_name String   @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@map("holiday")
+}
+
+model WorkingDayCalendar {
+  id           BigInt   @id @default(autoincrement())
+  working_date DateTime @db.Date
+  day          String?  @db.Text
+  week_num     Int?
+  month        Int?
+
+  @@map("working_day_calendar")
+}
+
 model Vendors {
-  id             BigInt @id @default(autoincrement())
-  vendor_name    String @db.Text
-  gstin          String? @db.Text
-  address        String? @db.Text
-  email          String? @db.Text
-  payment_term   String? @db.Text
-  person_name    String? @db.Text
-  phone          String? @db.Text
-  location       String? @db.Text
-  created_at     DateTime @db.Timestamptz() @default(now())
+  id           BigInt   @id @default(autoincrement())
+  vendor_name  String   @db.Text
+  gstin        String?  @db.Text
+  address      String?  @db.Text
+  email        String?  @db.Text
+  payment_term String?  @db.Text
+  person_name  String?  @db.Text
+  phone        String?  @db.Text
+  location     String?  @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
   @@map("vendors")
 }

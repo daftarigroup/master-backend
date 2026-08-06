@@ -432,6 +432,13 @@ export class GenericController {
             });
           }
           await pcReportService.recalculateStageKpis('Audit Data', tx);
+        } else if (table === 'holiday') {
+          if (created?.holiday_date) {
+            const hDate = new Date(created.holiday_date);
+            await tx.workingDayCalendar.deleteMany({
+              where: { working_date: hDate },
+            });
+          }
         }
 
         return created;
@@ -618,6 +625,27 @@ export class GenericController {
 
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const model = getPrismaModel(table, tx);
+
+      if (table === 'holiday') {
+        const existing = await model.findUnique({ where: { id: numericId } });
+        if (existing?.holiday_date) {
+          const hDate = new Date(existing.holiday_date);
+          const dayNames = ['रवि', 'सोम', 'मंगल', 'बुध', 'गुरु', 'शुक्र', 'शनि'];
+          const dow = hDate.getUTCDay();
+          const weekNum = Math.ceil(hDate.getUTCDate() / 7);
+          const monthNum = hDate.getUTCMonth() + 1;
+
+          await tx.workingDayCalendar.create({
+            data: {
+              working_date: hDate,
+              day: dayNames[dow],
+              week_num: weekNum,
+              month: monthNum,
+            },
+          });
+        }
+      }
+
       await model.delete({
         where: { id: numericId },
       });

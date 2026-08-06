@@ -21,8 +21,8 @@ export class InventoryStockService {
     poQty: number | string,
     _tx?: Prisma.TransactionClient
   ): number {
-    const qty = typeof quantity === 'string' ? parseInt(quantity, 10) || 0 : quantity || 0;
-    const po = typeof poQty === 'string' ? parseInt(poQty, 10) || 0 : poQty || 0;
+    const qty = typeof quantity === 'string' ? parseFloat(quantity) || 0 : quantity || 0;
+    const po = typeof poQty === 'string' ? parseFloat(poQty) || 0 : poQty || 0;
     return Math.max(0, qty - po);
   }
 
@@ -35,9 +35,9 @@ export class InventoryStockService {
     outQty: number | string,
     _tx?: Prisma.TransactionClient
   ): number {
-    const rec = typeof receivedQty === 'string' ? parseInt(receivedQty, 10) || 0 : receivedQty || 0;
-    const ret = typeof returnQty === 'string' ? parseInt(returnQty, 10) || 0 : returnQty || 0;
-    const out = typeof outQty === 'string' ? parseInt(outQty, 10) || 0 : outQty || 0;
+    const rec = typeof receivedQty === 'string' ? parseFloat(receivedQty) || 0 : receivedQty || 0;
+    const ret = typeof returnQty === 'string' ? parseFloat(returnQty) || 0 : returnQty || 0;
+    const out = typeof outQty === 'string' ? parseFloat(outQty) || 0 : outQty || 0;
     return rec - ret - out;
   }
 
@@ -54,8 +54,8 @@ export class InventoryStockService {
     // 1. Indented quantity & Approved quantity from indent
     const indentStats: any[] = await db.$queryRaw`
       SELECT 
-        COALESCE(SUM(CAST(NULLIF(quantity, '') AS INTEGER)), 0) as indented,
-        COALESCE(SUM(CAST(NULLIF(approved_quantity, '') AS INTEGER)), 0) as approved
+        COALESCE(SUM(CAST(NULLIF(quantity, '') AS NUMERIC)), 0) as indented,
+        COALESCE(SUM(CAST(NULLIF(approved_quantity, '') AS NUMERIC)), 0) as approved
       FROM indent
       WHERE product_name = ${productName}
     `;

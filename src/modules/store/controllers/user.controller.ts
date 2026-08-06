@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { prisma } from '../../../database/prisma';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ApiError } from '../../../utils/ApiError';
+import { config } from '../../../config';
 
 export class UserController {
   // GET /api/store/users
@@ -18,30 +20,44 @@ export class UserController {
 
   // POST /api/store/users/authenticate
   authenticate = asyncHandler(async (req: Request, res: Response) => {
-    const { username, password } = req.body;
+    const rawUsername = String(req.body.username || '').trim();
+    const rawPassword = String(req.body.password || '').trim();
 
-    if (!username || !password) {
+    if (!rawUsername || !rawPassword) {
       throw new ApiError(400, 'Username and password are required');
     }
 
     const user = await prisma.user.findFirst({
       where: {
-        user_name: String(username),
-        password: String(password),
+        user_name: { equals: rawUsername, mode: 'insensitive' },
+        password: rawPassword,
       },
     });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(401).json({
         success: false,
         message: 'Invalid username or password',
         data: null,
       });
     }
 
+    // Token scoped to the Checklist & Delegation module only (see auth.middleware.ts);
+    // the rest of the app has no backend auth enforcement and does not use this.
+    const checklistToken = jwt.sign(
+      {
+        id: String(user.id),
+        role: user.role || 'USER',
+        permittedFirms: (user.firm_access || []).map(String),
+      },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn as any }
+    );
+
     res.json({
       success: true,
       data: user,
+      checklistToken,
     });
   });
 
