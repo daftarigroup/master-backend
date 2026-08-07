@@ -479,9 +479,10 @@ model PcReport {
 }
 
 model PoMaster {
-  id                      BigInt   @id @default(autoincrement())
-  timestamp               DateTime @db.Timestamptz()
-  party_name              String?  @db.Text
+  id                      BigInt    @id @default(autoincrement())
+  timestamp               DateTime  @db.Timestamptz()
+  po_created_date         String?   @db.Text
+  party_name              String?   @db.Text
   po_number               String?  @db.Text
   quotation_number        String?  @db.Text
   quotation_date          String?  @db.Text
