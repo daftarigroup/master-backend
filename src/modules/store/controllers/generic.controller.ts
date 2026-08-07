@@ -16,6 +16,39 @@ function getModelKey(tableName: string): string {
   return parts[0] + parts.slice(1).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('');
 }
 
+export async function syncTableSequence(tableName: string, tx?: any) {
+  try {
+    const db = tx || prisma;
+    await db.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"${tableName}"', 'id'), COALESCE((SELECT MAX(id) FROM "${tableName}"), 0) + 1, false);`
+    );
+  } catch (err) {
+    console.warn(`Could not sync sequence for table '${tableName}':`, err);
+  }
+}
+
+export async function syncAllSequences(tx?: any) {
+  const db = tx || prisma;
+  const tables = [
+    'area_of_use', 'company', 'contractor_details', 'default_po_terms',
+    'department', 'firm', 'group_head', 'uom', 'item', 'master',
+    'payment_history', 'payments', 'pc_report', 'po_master',
+    'quotation_history', 'store_in', 'store_in_direct', 'tally_entry',
+    'fullkitting', 'indent', 'inventory', 'issue', 'site_location_details',
+    'terms_and_condition', 'vendors', 'working_day_calendar', 'holiday'
+  ];
+
+  for (const table of tables) {
+    try {
+      await db.$executeRawUnsafe(
+        `SELECT setval(pg_get_serial_sequence('"${table}"', 'id'), COALESCE((SELECT MAX(id) FROM "${table}"), 0) + 1, false);`
+      );
+    } catch {
+      // Ignore tables without serial sequence
+    }
+  }
+}
+
 function getPrismaModel(tableName: string, client?: any): any {
   const key = getModelKey(tableName);
   const target = client || prisma;
@@ -353,6 +386,7 @@ export class GenericController {
 
       const processCreateItem = async (item: any) => {
         const data = normalizeBody(table, { ...item });
+        delete data.id;
         if (data.active === undefined && (table === 'firm' || table === 'default_po_terms')) {
           data.active = true;
         }
@@ -381,8 +415,24 @@ export class GenericController {
           }
         }
 
-        // Main Mutation inside transaction
-        const created = await model.create({ data });
+        // Main Mutation inside transaction with sequence sync retry
+        let created: any;
+        try {
+          created = await model.create({ data });
+        } catch (err: any) {
+          const isIdUniqueError =
+            err?.code === 'P2002' ||
+            String(err?.message || '').includes('id') ||
+            String(err?.message || '').includes('Unique constraint');
+
+          if (isIdUniqueError) {
+            console.warn(`⚠️ ID constraint failure on '${table}'. Syncing PostgreSQL sequence and retrying...`);
+            await syncTableSequence(table, tx);
+            created = await model.create({ data });
+          } else {
+            throw err;
+          }
+        }
 
         // Post-Mutation Hooks (passing tx to all service calls)
         if (table === 'indent') {
