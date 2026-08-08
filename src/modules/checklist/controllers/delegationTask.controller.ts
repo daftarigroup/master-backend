@@ -265,4 +265,37 @@ export class DelegationTaskController {
 
     res.json({ success: true, data: history });
   });
+
+  delete = asyncHandler(async (req: FirmScopedRequest, res: Response) => {
+    const id = BigInt(String(req.params.id));
+    const scopeWhere = buildScopeWhere(req);
+
+    const existing = await prisma.delegationTask.findFirst({ where: { ...scopeWhere, task_id: id } });
+    if (!existing) {
+      throw new ApiError(404, 'Delegation task not found');
+    }
+
+    await prisma.delegationDone.deleteMany({ where: { task_id: id } });
+    await prisma.delegationTask.delete({ where: { task_id: id } });
+
+    res.json({ success: true, message: 'Delegation task deleted successfully' });
+  });
+
+  deleteBatch = asyncHandler(async (req: FirmScopedRequest, res: Response) => {
+    const { ids } = req.body as { ids: (number | string)[] };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new ApiError(400, 'ids array is required');
+    }
+
+    const scopeWhere = buildScopeWhere(req);
+    const bigIntIds = ids.map((id) => BigInt(String(id)));
+
+    const finalWhere = { ...scopeWhere, task_id: { in: bigIntIds } };
+
+    await prisma.delegationDone.deleteMany({ where: { task_id: { in: bigIntIds } } });
+    const result = await prisma.delegationTask.deleteMany({ where: finalWhere });
+
+    res.json({ success: true, deletedCount: result.count });
+  });
 }
+

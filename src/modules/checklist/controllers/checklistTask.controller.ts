@@ -284,4 +284,61 @@ export class ChecklistTaskController {
 
     res.json({ success: true, updatedCount: count, anchorTaskId: Number(anchor.task_id) });
   });
+
+  deleteGroup = asyncHandler(async (req: FirmScopedRequest, res: Response) => {
+    const id = BigInt(String(req.params.id));
+
+    const anchor = await prisma.checklistTask.findUnique({ where: { task_id: id } });
+    if (!anchor) {
+      throw new ApiError(404, 'Checklist task not found');
+    }
+    assertFirmAllowed(req, anchor.firm_id ? String(anchor.firm_id) : null);
+
+    const groupWhere: any = {
+      firm_id: anchor.firm_id,
+      doer_id: anchor.doer_id,
+      task_description: anchor.task_description,
+      frequency: anchor.frequency,
+    };
+
+    const scopeWhere = buildScopeWhere(req);
+    const finalWhere = { ...groupWhere, ...scopeWhere };
+
+    const result = await prisma.checklistTask.deleteMany({ where: finalWhere });
+
+    res.json({ success: true, deletedCount: result.count, anchorTaskId: Number(anchor.task_id) });
+  });
+
+  deleteGroupsBatch = asyncHandler(async (req: FirmScopedRequest, res: Response) => {
+    const { anchorIds } = req.body as { anchorIds: (number | string)[] };
+    if (!Array.isArray(anchorIds) || anchorIds.length === 0) {
+      throw new ApiError(400, 'anchorIds array is required');
+    }
+
+    const scopeWhere = buildScopeWhere(req);
+    let totalDeleted = 0;
+
+    for (const rawId of anchorIds) {
+      const id = BigInt(String(rawId));
+      const anchor = await prisma.checklistTask.findUnique({ where: { task_id: id } });
+      if (anchor) {
+        if (req.firmScope !== null && req.firmScope !== undefined) {
+          if (anchor.firm_id && !req.firmScope.includes(String(anchor.firm_id))) {
+            continue;
+          }
+        }
+        const groupWhere: any = {
+          firm_id: anchor.firm_id,
+          doer_id: anchor.doer_id,
+          task_description: anchor.task_description,
+          frequency: anchor.frequency,
+        };
+        const result = await prisma.checklistTask.deleteMany({ where: { ...groupWhere, ...scopeWhere } });
+        totalDeleted += result.count;
+      }
+    }
+
+    res.json({ success: true, deletedCount: totalDeleted });
+  });
 }
+

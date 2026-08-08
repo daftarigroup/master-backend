@@ -874,6 +874,8 @@ model User {
   hod_store_approval                        Boolean?
   firm_access                               BigInt[]
   store_issue_return                        Boolean?
+  system_access                             Json?
+  page_access                               Json?
   modify_access                             AccessType
   role                                      Role?      @default(USER)
   day_off                                   String?    @db.Text

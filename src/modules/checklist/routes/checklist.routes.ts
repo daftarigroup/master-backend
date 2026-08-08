@@ -50,6 +50,19 @@ router.patch(
   checklistTaskController.reject
 );
 
+router.post(
+  '/checklist-task/delete-groups',
+  requireRole(...ADMIN_ROLES),
+  scopeToFirmAccess,
+  checklistTaskController.deleteGroupsBatch
+);
+router.delete(
+  '/checklist-task/:id/group',
+  requireRole(...ADMIN_ROLES),
+  scopeToFirmAccess,
+  checklistTaskController.deleteGroup
+);
+
 router.patch(
   '/checklist-task/:id/group',
   requireRole(...ADMIN_ROLES),
@@ -67,6 +80,18 @@ router.patch(
 // ==================== DELEGATION (ONE-TIME) TASKS ====================
 router.get('/delegation-task', requireRole(...ANY_ROLE), scopeToFirmAccess, delegationTaskController.list);
 router.get('/delegation-task/:id', requireRole(...ANY_ROLE), scopeToFirmAccess, delegationTaskController.getById);
+router.post(
+  '/delegation-task/delete-batch',
+  requireRole(...ADMIN_ROLES),
+  scopeToFirmAccess,
+  delegationTaskController.deleteBatch
+);
+router.delete(
+  '/delegation-task/:id',
+  requireRole(...ADMIN_ROLES),
+  scopeToFirmAccess,
+  delegationTaskController.delete
+);
 router.patch(
   '/delegation-task/:id',
   requireRole(...ADMIN_ROLES),
