@@ -4,11 +4,19 @@ import fs from 'fs';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ApiError } from '../../../utils/ApiError';
 import { uploadBufferToS3, getObjectFromS3 } from '../../../services/s3.service';
+import { config } from '../../../config/index';
 
 function extractS3Key(pathOrUrl: string): string {
   let cleaned = pathOrUrl.trim();
+  try {
+    cleaned = decodeURIComponent(cleaned);
+  } catch (_) {}
+  // Strip query strings if present
+  cleaned = cleaned.split('?')[0];
+  // Strip full protocol and domain 
   cleaned = cleaned.replace(/^https?:\/\/[^\/]+\//i, '');
-  cleaned = cleaned.replace(/^\/+/, '').replace(/^uploads\//i, '');
+  // Strip leading slashes and prefix paths
+  cleaned = cleaned.replace(/^\/+/, '').replace(/^uploads\//i, '').replace(/^api\/store\/files\//i, '');
   return cleaned;
 }
 
@@ -25,7 +33,26 @@ export class UploadController {
     const pathName = String(req.body.path || file.originalname).trim();
     const key = `${bucket}/${pathName}`.replace(/^\/+/, '');
 
-    const url = await uploadBufferToS3(key, file.buffer, file.mimetype);
+    let url: string;
+    if (config.aws.bucket && config.aws.accessKey && config.aws.secretKey) {
+      try {
+        url = await uploadBufferToS3(key, file.buffer, file.mimetype);
+      } catch (s3Err: any) {
+        console.error('AWS S3 Upload failed, saving to local uploads fallback:', s3Err?.message || s3Err);
+        const localDirPath = path.join(__dirname, '../../../../uploads', path.dirname(key));
+        fs.mkdirSync(localDirPath, { recursive: true });
+        const localFilePath = path.join(__dirname, '../../../../uploads', key);
+        fs.writeFileSync(localFilePath, file.buffer);
+        url = `/uploads/${key}`;
+      }
+    } else {
+      console.warn('AWS S3 credentials not set in environment. Saving to local uploads folder.');
+      const localDirPath = path.join(__dirname, '../../../../uploads', path.dirname(key));
+      fs.mkdirSync(localDirPath, { recursive: true });
+      const localFilePath = path.join(__dirname, '../../../../uploads', key);
+      fs.writeFileSync(localFilePath, file.buffer);
+      url = `/uploads/${key}`;
+    }
 
     res.status(201).json({
       success: true,
@@ -43,28 +70,30 @@ export class UploadController {
 
     const s3Key = extractS3Key(rawTarget);
 
-    // 1. Try fetching from S3 using IAM credentials
-    try {
-      const s3Data = await getObjectFromS3(s3Key);
-      if (s3Data && s3Data.Body) {
-        if (s3Data.ContentType) {
-          res.setHeader('Content-Type', s3Data.ContentType);
-        }
-        res.setHeader('Content-Disposition', 'inline');
-        if (s3Data.ContentLength) {
-          res.setHeader('Content-Length', s3Data.ContentLength.toString());
-        }
+    // 1. Try fetching from S3 if credentials exist
+    if (config.aws.bucket && config.aws.accessKey && config.aws.secretKey) {
+      try {
+        const s3Data = await getObjectFromS3(s3Key);
+        if (s3Data && s3Data.Body) {
+          if (s3Data.ContentType) {
+            res.setHeader('Content-Type', s3Data.ContentType);
+          }
+          res.setHeader('Content-Disposition', 'inline');
+          if (s3Data.ContentLength) {
+            res.setHeader('Content-Length', s3Data.ContentLength.toString());
+          }
 
-        const stream = s3Data.Body as any;
-        if (typeof stream.pipe === 'function') {
-          return stream.pipe(res);
-        } else {
-          const bytes = await stream.transformToByteArray();
-          return res.send(Buffer.from(bytes));
+          const stream = s3Data.Body as any;
+          if (typeof stream.pipe === 'function') {
+            return stream.pipe(res);
+          } else {
+            const bytes = await stream.transformToByteArray();
+            return res.send(Buffer.from(bytes));
+          }
         }
+      } catch (s3Err: any) {
+        console.warn(`S3 fetch failed for key '${s3Key}' (Bucket: ${config.aws.bucket}):`, s3Err?.message || s3Err);
       }
-    } catch (s3Err) {
-      console.warn(`S3 fetch failed for key '${s3Key}', checking local uploads fallback:`, s3Err);
     }
 
     // 2. Fallback to local ./uploads directory
