@@ -2,6 +2,8 @@ import { Router } from 'express';
 import storeRoutes from '../modules/store/routes/store.routes';
 import emailRoutes from './email.routes';
 import checklistRoutes from '../modules/checklist/routes/checklist.routes';
+import pettyCashRoutes from '../modules/petty-cash/routes/pettyCash.routes';
+import documentRoutes from '../modules/document/routes/document.routes';
 import { authenticateJWT } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -13,5 +15,12 @@ router.get('/health', (req, res) => {
 router.use('/store', storeRoutes);
 router.use('/email', emailRoutes);
 router.use('/checklist', authenticateJWT, checklistRoutes);
+router.use('/petty-cash', authenticateJWT, pettyCashRoutes);
+router.use('/document', authenticateJWT, documentRoutes);
+router.use('/doc-submanager', authenticateJWT, documentRoutes);
+
+// Compatibility aliases for petty cash flat endpoints
+router.use('/', authenticateJWT, pettyCashRoutes);
 
 export default router;
+

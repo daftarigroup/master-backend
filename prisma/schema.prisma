@@ -1000,3 +1000,242 @@ model Vendors {
 
   @@map("vendors")
 }
+
+// ===================== PETTY CASH & EXPENSE SYSTEM =====================
+
+enum PettyCashEntryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PettyCashLedgerType {
+  CREDIT
+  EXPENSE
+  DEBIT
+}
+
+model Credit {
+  id            String               @id @default(cuid())
+  sn            String               @unique
+  personName    String
+  projectName   String?
+  date          DateTime             @db.Date
+  amount        Decimal              @db.Decimal(12, 2)
+  paymentMode   String
+  image         String?
+  remarks       String?
+  status        PettyCashEntryStatus @default(APPROVED)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  ledgerEntries LedgerEntry[]
+
+  @@index([personName])
+  @@map("credits")
+}
+
+model Expense {
+  id            String               @id @default(cuid())
+  sn            String               @unique
+  personName    String
+  projectName   String?
+  date          DateTime             @db.Date
+  amount        Decimal              @db.Decimal(12, 2)
+  paymentMode   String
+  groupHead     String
+  image         String?
+  remarks       String?
+  status        PettyCashEntryStatus @default(PENDING)
+  approvedBy    String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  ledgerEntries LedgerEntry[]
+
+  @@index([personName])
+  @@map("expenses")
+}
+
+model LedgerEntry {
+  id         String              @id @default(cuid())
+  personName String
+  type       PettyCashLedgerType
+  amount     Decimal             @db.Decimal(12, 2)
+  date       DateTime            @db.Date
+  balance    Decimal             @db.Decimal(12, 2)
+  createdAt  DateTime            @default(now())
+
+  creditId  String?
+  credit    Credit?  @relation(fields: [creditId], references: [id])
+  expenseId String?
+  expense   Expense? @relation(fields: [expenseId], references: [id])
+
+  @@index([personName])
+  @@map("ledger_entries")
+}
+
+model ProjectMaster {
+  id        String   @id @default(cuid())
+  type      String
+  value     String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, value])
+  @@index([type])
+  @@map("project_master")
+}
+
+model PettyCashSettings {
+  id               Int      @id @default(1)
+  paymentModes     String[] @default([])
+  lastSerialNumber Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ===================== DOC SUBMANAGER SYSTEM =====================
+
+model DocDocument {
+  id           String    @id @default(cuid())
+  sn           String    @unique
+  companyName  String
+  documentType String
+  category     String
+  documentName String
+  needsRenewal Boolean   @default(false)
+  renewalDate  DateTime? @db.Timestamptz()
+  file         String?
+  fileContent  String?
+  date         DateTime  @db.Timestamptz()
+  status       String    @default("Active")
+  createdAt    DateTime  @default(now()) @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @db.Timestamptz()
+
+  @@index([companyName])
+  @@map("doc_documents")
+}
+
+model DocRenewal {
+  id              String    @id @default(cuid())
+  documentId      String
+  sn              String
+  documentName    String
+  documentType    String
+  category        String
+  companyName     String
+  entryDate       DateTime  @db.Timestamptz()
+  oldRenewalDate  DateTime? @db.Timestamptz()
+  oldFile         String?
+  oldFileContent  String?
+  renewalStatus   String    @default("No")
+  nextRenewalDate DateTime? @db.Timestamptz()
+  newFile         String?
+  newFileContent  String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([documentId])
+  @@map("doc_renewals")
+}
+
+model DocShare {
+  id            String   @id @default(cuid())
+  shareNo       String   @unique
+  dateTime      DateTime @default(now()) @db.Timestamptz()
+  docSerial     String
+  docName       String
+  docFile       String?
+  sharedVia     String
+  recipientName String
+  contactInfo   String
+  createdAt     DateTime @default(now()) @db.Timestamptz()
+
+  @@map("doc_shares")
+}
+
+model DocSubscription {
+  id                 String    @id @default(cuid())
+  sn                 String    @unique
+  requestedDate      DateTime  @db.Timestamptz()
+  companyName        String
+  subscriberName     String
+  subscriptionName   String
+  price              String
+  frequency          String
+  purpose            String
+  startDate          DateTime? @db.Timestamptz()
+  endDate            DateTime? @db.Timestamptz()
+  status             String    @default("")
+  plan               String?
+  file               String?
+  fileContent        String?
+  approvalNo         String?
+  approvalDate       DateTime? @db.Timestamptz()
+  paymentDate        DateTime? @db.Timestamptz()
+  paymentMethod      String?
+  paymentFile        String?
+  paymentFileContent String?
+  remarks            String?
+  createdAt          DateTime  @default(now()) @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @db.Timestamptz()
+
+  @@index([companyName])
+  @@map("doc_subscriptions")
+}
+
+model DocSubscriptionRenewal {
+  id               String    @id @default(cuid())
+  subscriptionId   String
+  renewalNo        String    @unique
+  sn               String
+  companyName      String
+  subscriberName   String
+  subscriptionName String
+  frequency        String
+  price            String
+  endDate          DateTime? @db.Timestamptz()
+  renewalStatus    String    @default("")
+  createdAt        DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([subscriptionId])
+  @@map("doc_subscription_renewals")
+}
+
+model DocLoan {
+  id                        String    @id @default(cuid())
+  sn                        String    @unique
+  loanName                  String
+  bankName                  String
+  amount                    String
+  emi                       String
+  startDate                 DateTime  @db.Timestamptz()
+  endDate                   DateTime  @db.Timestamptz()
+  providedDocument          String
+  remarks                   String?
+  file                      String?
+  fileContent               String?
+  foreclosureStatus         String?
+  requestDate               DateTime? @db.Timestamptz()
+  requesterName             String?
+  documentStatus            String?
+  documentCollectionRemarks String?
+  closerRequestDate         DateTime? @db.Timestamptz()
+  collectNocStatus          String?
+  finalSettlementStatus     String?
+  nextDate                  DateTime? @db.Timestamptz()
+  settlementDate            DateTime? @db.Timestamptz()
+  createdAt                 DateTime  @default(now()) @db.Timestamptz()
+  updatedAt                 DateTime  @updatedAt @db.Timestamptz()
+
+  @@index([bankName])
+  @@map("doc_loans")
+}
+
+model DocCounter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("doc_counters")
+}
+

@@ -15,7 +15,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:pull": "prisma db pull",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "export:items": "tsx scripts/export_item_table.ts",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
