@@ -35,7 +35,7 @@ export async function syncAllSequences(tx?: any) {
     'payment_history', 'payments', 'pc_report', 'po_master',
     'quotation_history', 'store_in', 'store_in_direct', 'tally_entry',
     'fullkitting', 'indent', 'inventory', 'issue', 'site_location_details',
-    'terms_and_condition', 'vendors', 'working_day_calendar', 'holiday'
+    'site_engineer_details', 'terms_and_condition', 'vendors', 'working_day_calendar', 'holiday'
   ];
 
   for (const table of tables) {
@@ -98,8 +98,8 @@ function getModelFields(tableName: string): Record<string, { type: string; kind:
       if (typeof f.type === 'string') {
         fieldsMap[f.name] = {
           type: f.type,
-          kind: f.kind,
-          isRequired: f.isRequired ?? (!f.isNullable && !f.isOptional),
+          kind: f.kind || 'scalar',
+          isRequired: f.isRequired ?? true,
         };
       }
     }
@@ -129,13 +129,13 @@ function castValueForField(fieldType: string | undefined, key: string, val: any)
           try { return BigInt(val.trim()); } catch { return val; }
         }
         if (typeof val === 'number') {
-          return BigInt(val);
+          return BigInt(Math.floor(val));
         }
         return val;
 
       case 'Int':
-        if (typeof val === 'string' && /^-?\d+$/.test(val.trim())) {
-          return parseInt(val.trim(), 10);
+        if (typeof val === 'string' && !isNaN(parseInt(val, 10))) {
+          return parseInt(val, 10);
         }
         if (typeof val === 'number') {
           return Math.floor(val);
@@ -281,6 +281,15 @@ function normalizeBody(tableName: string, body: Record<string, any>): Record<str
 const TABLE_INCLUDES: Record<string, Record<string, any>> = {
   item: { group_head: true, uom: true, firm: true },
   firm: { company: true },
+  vendors: { firm: true },
+  contractor_details: { firm: true },
+  site_location_details: { firm: true },
+  site_engineer_details: { firm: true },
+  terms_and_condition: { firm: true },
+  default_po_terms: { firm: true },
+  group_head: { firm: true },
+  uom: { firm: true },
+  area_of_use: { firm: true },
 };
 
 export class GenericController {

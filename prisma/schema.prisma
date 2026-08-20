@@ -32,6 +32,9 @@ model AreaOfUse {
   id         BigInt   @id @default(autoincrement())
   name       String?  @db.Text
   created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
 
   @@map("area_of_use")
 }
@@ -49,6 +52,9 @@ model Company {
   updated_at          DateTime @default(now()) @db.Timestamptz()
   billing_address     String?  @db.Text
   destination_address String?  @db.Text
+  firm_id             BigInt?
+  firm_name           String?  @db.Text
+  firm_rel            Firm?    @relation("company_firm", fields: [firm_id], references: [id])
   firm                Firm[]
 
   @@map("company")
@@ -64,6 +70,9 @@ model ContractorDetails {
   responsible_person String?   @db.Text
   location           String?   @db.Text
   phone              String?   @db.Text
+  firm_id            BigInt?
+  firm_name          String?   @db.Text
+  firm               Firm?     @relation(fields: [firm_id], references: [id])
 
   @@map("contractor_details")
 }
@@ -74,6 +83,9 @@ model DefaultPoTerms {
   sort_order Int?
   active     Boolean  @default(true)
   created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
 
   @@map("default_po_terms")
 }
@@ -113,6 +125,16 @@ model Firm {
   item                         Item[]
   checklist_task               ChecklistTask[]
   delegation_task              DelegationTask[]
+  area_of_use                  AreaOfUse[]
+  company_records              Company[]          @relation("company_firm")
+  contractor_details           ContractorDetails[]
+  default_po_terms             DefaultPoTerms[]
+  group_head                   GroupHead[]
+  site_engineer_details        SiteEngineerDetails[]
+  site_location_details        SiteLocationDetails[]
+  terms_and_condition          TermsAndCondition[]
+  uom                          Uom[]
+  vendors                      Vendors[]
 
   @@map("firm")
 }
@@ -155,6 +177,9 @@ model GroupHead {
   id         BigInt   @id @default(autoincrement())
   name       String?  @db.Text
   created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
   item       Item[]
 
   @@map("group_head")
@@ -288,6 +313,7 @@ model Inventory {
   max_level         String?  @db.Text
   opening           String?  @db.Text
   individual_rate   String?  @db.Text
+  avg_price         Decimal?
   indented          Decimal? @default(0)
   approved          Decimal?
   purchase_quantity Decimal?
@@ -588,10 +614,13 @@ model Received {
 }
 
 model SiteEngineerDetails {
-  id     Int     @id @default(autoincrement())
-  name   String  @db.Text
-  number String  @db.Text
-  email  String? @db.Text
+  id        Int     @id @default(autoincrement())
+  name      String  @db.Text
+  number    String  @db.Text
+  email     String? @db.Text
+  firm_id   BigInt?
+  firm_name String? @db.Text
+  firm      Firm?   @relation(fields: [firm_id], references: [id])
 
   @@map("site_engineer_details")
 }
@@ -600,6 +629,9 @@ model SiteLocationDetails {
   id         BigInt    @id @default(autoincrement())
   created_at DateTime? @default(now()) @db.Timestamptz()
   location   String    @db.Text
+  firm_id    BigInt?
+  firm_name  String?   @db.Text
+  firm       Firm?     @relation(fields: [firm_id], references: [id])
 
   @@map("site_location_details")
 }
@@ -814,10 +846,13 @@ model TallyEntry {
 }
 
 model TermsAndCondition {
+  id         BigInt    @id @default(autoincrement())
+  title      String?   @db.Text
   name       String    @db.Text
   created_at DateTime? @default(now()) @db.Timestamptz()
-  title      String?   @db.Text
-  id         BigInt    @id @default(autoincrement())
+  firm_id    BigInt?
+  firm_name  String?   @db.Text
+  firm       Firm?     @relation(fields: [firm_id], references: [id])
 
   @@map("terms_and_condition")
 }
@@ -826,6 +861,9 @@ model Uom {
   id         BigInt   @id @default(autoincrement())
   name       String?  @db.Text
   created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
   item       Item[]
 
   @@map("uom")
@@ -997,6 +1035,9 @@ model Vendors {
   phone        String?  @db.Text
   location     String?  @db.Text
   created_at   DateTime @default(now()) @db.Timestamptz()
+  firm_id      BigInt?
+  firm_name    String?  @db.Text
+  firm         Firm?    @relation(fields: [firm_id], references: [id])
 
   @@map("vendors")
 }
