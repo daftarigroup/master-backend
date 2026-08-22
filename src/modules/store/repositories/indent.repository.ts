@@ -62,12 +62,19 @@ export class IndentRepository {
    */
   async updateByIndentNumber(indentNumber: string, data: any): Promise<any> {
     const record = await this.findByIndentNumber(indentNumber);
-    if (!record) {
-      throw new Error(`Indent with number ${indentNumber} not found`);
-    }
     return prisma.indent.update({
       where: { id: record.id },
       data,
     });
   }
+
+  /**
+   * Delete indent by ID
+   */
+  async deleteById(id: number): Promise<any> {
+    return prisma.indent.delete({
+      where: { id: BigInt(id) },
+    });
+  }
 }
+

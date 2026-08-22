@@ -70,4 +70,18 @@ export class IndentController {
     await this.service.updateStoreOutApproval(indentNumber, req.body);
     res.json({ success: true, message: 'Indent Store Out approval updated successfully' });
   });
+
+  deleteIndent = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const id = Number(req.params.id);
+    await this.service.deleteIndentRecord(id);
+    res.json({ success: true, message: 'Indent deleted successfully' });
+  });
+
+  resetStage = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const stage = String(req.body.stage || req.params.stage || '');
+    const updated = await this.service.resetIndentStage(id, stage);
+    res.json({ success: true, message: `Stage '${stage}' reset successfully`, data: updated });
+  });
 }
+

@@ -27,4 +27,9 @@ router.patch('/indents/number/:indentNumber/po-creation', validate(updateIndentP
 router.patch('/indents/number/:indentNumber/payment-terms', validate(updateIndentPaymentTermsSchema), controller.updatePaymentTerms);
 router.patch('/indents/number/:indentNumber/store-out-approval', validate(updateIndentStoreOutApprovalSchema), controller.updateStoreOutApproval);
 
+router.delete('/indents/:id', controller.deleteIndent);
+router.post('/indents/:id/reset-stage', controller.resetStage);
+router.delete('/indents/:id/stage/:stage', controller.resetStage);
+
 export default router;
+

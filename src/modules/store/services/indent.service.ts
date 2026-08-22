@@ -213,5 +213,259 @@ export class IndentService {
     await this.pcReportService.recalculateStageKpis('Store Out Approval');
     return updated;
   }
+
+  /**
+   * Delete complete indent record by ID
+   */
+  async deleteIndentRecord(id: number) {
+    const existing = await this.repository.findById(id);
+    if (!existing) {
+      throw new Error(`Indent with ID ${id} not found`);
+    }
+
+    const deleted = await this.repository.deleteById(id);
+
+    if (deleted?.product_name) {
+      await this.inventoryService.syncInventoryItemAggregations(deleted.product_name);
+    }
+
+    // Recalculate all affected Indent stage KPIs
+    await this.pcReportService.recalculateStageKpis('Should Need Offer Or Regular');
+    await this.pcReportService.recalculateStageKpis('Reguler Or Need Offer Rate Update');
+    await this.pcReportService.recalculateStageKpis('Approval And Rejection For Purchase');
+    await this.pcReportService.recalculateStageKpis('PO WebApp');
+    await this.pcReportService.recalculateStageKpis('Material Lifting');
+
+    return deleted;
+  }
+
+  /**
+   * Reset specific indent stage and cascade reset all concurrent downstream stages
+   */
+  async resetIndentStage(id: number, stage: string) {
+    const existing = await this.repository.findById(id);
+    if (!existing) {
+      throw new Error(`Indent with ID ${id} not found`);
+    }
+
+    let updatePayload: any = {};
+
+    if (stage === 'approval') {
+      // Reset Stage 2 (Indent Approval) + Stages 3, 4, 5
+      updatePayload = {
+        actual1: null,
+        time_delay1: null,
+        vendor_type: 'Pending',
+        approved_quantity: null,
+        indent_approved_by: null,
+        approved_date: null,
+        status: 'Pending',
+        planned2: null,
+        // Stage 3 fields
+        actual2: null,
+        time_delay2: null,
+        vendor_name1: null,
+        select_rate_type1: null,
+        rate1: null,
+        with_tax_or_not1: null,
+        tax_value1: null,
+        payment_term1: null,
+        whatsapp_number1: null,
+        email_id1: null,
+        vendor_name2: null,
+        select_rate_type2: null,
+        rate2: null,
+        with_tax_or_not2: null,
+        tax_value2: null,
+        payment_term2: null,
+        whatsapp_number2: null,
+        email_id2: null,
+        vendor_name3: null,
+        select_rate_type3: null,
+        rate3: null,
+        with_tax_or_not3: null,
+        tax_value3: null,
+        payment_term3: null,
+        whatsapp_number3: null,
+        email_id3: null,
+        product_code: null,
+        comparison_sheet: null,
+        advance_percent1: null,
+        advance_percent2: null,
+        advance_percent3: null,
+        quotation_no1: '',
+        quotation_date1: '',
+        quotation_no2: '',
+        quotation_date2: '',
+        quotation_no3: '',
+        quotation_date3: '',
+        delivery_time1: null,
+        delivery_time2: null,
+        delivery_time3: null,
+        make1: null,
+        make2: null,
+        make3: null,
+        po_requred: null,
+        planned3: null,
+        // Stage 4 fields
+        actual3: null,
+        time_delay3: null,
+        vendor1_rank: null,
+        vendor2_rank: null,
+        vendor3_rank: null,
+        planned4: null,
+        // Stage 5 fields
+        actual4: null,
+        time_delay4: null,
+        approved_vendor_name: null,
+        approved_rate: null,
+        with_tax_or_not4: null,
+        tax_value4: null,
+        approved_payment_term: null,
+        approved_advance_percent: null,
+        approved_quotation_no: '',
+        approved_quotation_date: '',
+        planned5: null,
+        po_number: null,
+        po_copy: null,
+        payment_term: null,
+        actual5: null,
+        time_delay: null,
+      };
+    } else if (stage === 'vendor_rate') {
+      // Reset Stage 3 (Vendor Rate Update) + Stages 4, 5 (Stages 1 and 2 remain intact)
+      updatePayload = {
+        actual2: null,
+        time_delay2: null,
+        vendor_name1: null,
+        select_rate_type1: null,
+        rate1: null,
+        with_tax_or_not1: null,
+        tax_value1: null,
+        payment_term1: null,
+        whatsapp_number1: null,
+        email_id1: null,
+        vendor_name2: null,
+        select_rate_type2: null,
+        rate2: null,
+        with_tax_or_not2: null,
+        tax_value2: null,
+        payment_term2: null,
+        whatsapp_number2: null,
+        email_id2: null,
+        vendor_name3: null,
+        select_rate_type3: null,
+        rate3: null,
+        with_tax_or_not3: null,
+        tax_value3: null,
+        payment_term3: null,
+        whatsapp_number3: null,
+        email_id3: null,
+        product_code: null,
+        comparison_sheet: null,
+        advance_percent1: null,
+        advance_percent2: null,
+        advance_percent3: null,
+        quotation_no1: '',
+        quotation_date1: '',
+        quotation_no2: '',
+        quotation_date2: '',
+        quotation_no3: '',
+        quotation_date3: '',
+        delivery_time1: null,
+        delivery_time2: null,
+        delivery_time3: null,
+        make1: null,
+        make2: null,
+        make3: null,
+        po_requred: null,
+        planned3: null,
+        // Stage 4 fields
+        actual3: null,
+        time_delay3: null,
+        vendor1_rank: null,
+        vendor2_rank: null,
+        vendor3_rank: null,
+        planned4: null,
+        // Stage 5 fields
+        actual4: null,
+        time_delay4: null,
+        approved_vendor_name: null,
+        approved_rate: null,
+        with_tax_or_not4: null,
+        tax_value4: null,
+        approved_payment_term: null,
+        approved_advance_percent: null,
+        approved_quotation_no: '',
+        approved_quotation_date: '',
+        planned5: null,
+        po_number: null,
+        po_copy: null,
+        payment_term: null,
+        actual5: null,
+        time_delay: null,
+      };
+    } else if (stage === 'technical_approval') {
+      // Reset Stage 4 (Technical Approval) + Stage 5 (Stages 1, 2, 3 remain intact)
+      updatePayload = {
+        actual3: null,
+        time_delay3: null,
+        vendor1_rank: null,
+        vendor2_rank: null,
+        vendor3_rank: null,
+        planned4: null,
+        // Stage 5 fields
+        actual4: null,
+        time_delay4: null,
+        approved_vendor_name: null,
+        approved_rate: null,
+        with_tax_or_not4: null,
+        tax_value4: null,
+        approved_payment_term: null,
+        approved_advance_percent: null,
+        approved_quotation_no: '',
+        approved_quotation_date: '',
+        planned5: null,
+        po_number: null,
+        po_copy: null,
+        payment_term: null,
+        actual5: null,
+        time_delay: null,
+      };
+    } else if (stage === 'management_approval') {
+      // Reset Stage 5 (Management Approval) (Stages 1, 2, 3, 4 remain intact)
+      updatePayload = {
+        actual4: null,
+        time_delay4: null,
+        approved_vendor_name: null,
+        approved_rate: null,
+        with_tax_or_not4: null,
+        tax_value4: null,
+        approved_payment_term: null,
+        approved_advance_percent: null,
+        approved_quotation_no: '',
+        approved_quotation_date: '',
+        planned5: null,
+        po_number: null,
+        po_copy: null,
+        payment_term: null,
+        actual5: null,
+        time_delay: null,
+      };
+    } else {
+      throw new Error(`Invalid stage name '${stage}' for indent reset`);
+    }
+
+    const updated = await this.repository.updateById(id, updatePayload);
+
+    // Recalculate KPIs for affected stages
+    await this.pcReportService.recalculateStageKpis('Should Need Offer Or Regular');
+    await this.pcReportService.recalculateStageKpis('Reguler Or Need Offer Rate Update');
+    await this.pcReportService.recalculateStageKpis('Approval And Rejection For Purchase');
+    await this.pcReportService.recalculateStageKpis('PO WebApp');
+    await this.pcReportService.recalculateStageKpis('Material Lifting');
+
+    return updated;
+  }
 }
 

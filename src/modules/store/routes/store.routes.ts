@@ -43,6 +43,11 @@ router.patch('/indents/number/:indentNumber/po-creation', validate(updateIndentP
 router.patch('/indents/number/:indentNumber/payment-terms', validate(updateIndentPaymentTermsSchema), indentController.updatePaymentTerms);
 router.patch('/indents/number/:indentNumber/store-out-approval', validate(updateIndentStoreOutApprovalSchema), indentController.updateStoreOutApproval);
 
+router.delete('/indents/:id', indentController.deleteIndent);
+router.post('/indents/:id/reset-stage', indentController.resetStage);
+router.delete('/indents/:id/stage/:stage', indentController.resetStage);
+
+
 // ==================== UPLOAD & FILE ROUTES ====================
 router.post('/upload', uploadSingle, uploadController.uploadFile);
 router.get('/file-proxy', uploadController.getFile);
