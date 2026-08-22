@@ -84,14 +84,29 @@ export class IndentService {
   }
 
   async updateApproval(id: number, data: any) {
+    const isReject = data.vendor_type === 'Reject' || data.status === 'Rejected';
     const updateData: any = {
       actual1: data.actual1 ? new Date(data.actual1) : undefined,
       vendor_type: data.vendor_type,
-      approved_quantity: data.approved_quantity !== undefined ? String(data.approved_quantity) : undefined,
-      planned2: data.planned2 ? new Date(data.planned2) : undefined,
-      status: data.status,
+      approved_quantity: isReject ? '0' : (data.approved_quantity !== undefined ? String(data.approved_quantity) : undefined),
+      planned2: isReject ? null : (data.planned2 ? new Date(data.planned2) : undefined),
+      status: isReject ? 'Rejected' : (data.status || 'Completed'),
       indent_url: data.indent_url,
     };
+
+    if (isReject) {
+      // Clear any downstream stage data so further stages never receive this rejected indent
+      updateData.actual2 = null;
+      updateData.planned3 = null;
+      updateData.actual3 = null;
+      updateData.planned4 = null;
+      updateData.actual4 = null;
+      updateData.planned5 = null;
+      updateData.actual5 = null;
+      updateData.po_number = null;
+      updateData.po_copy = null;
+      updateData.approved_vendor_name = null;
+    }
 
     if (data.actual1 && data.planned1) {
       updateData.time_delay1 = DelayCalculatorService.calculateDelay(data.actual1, data.planned1);
@@ -102,6 +117,7 @@ export class IndentService {
       await this.inventoryService.syncInventoryItemAggregations(updated.product_name);
     }
     await this.pcReportService.recalculateStageKpis('Should Need Offer Or Regular');
+    await this.pcReportService.recalculateStageKpis('Reguler Or Need Offer Rate Update');
     return updated;
   }
 
