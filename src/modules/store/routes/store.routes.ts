@@ -16,11 +16,14 @@ import {
   updateIndentStoreOutApprovalSchema,
 } from '../validators/indent.validator';
 
+import { StageResetController } from '../controllers/stageReset.controller';
+
 const router = Router();
 const indentController = new IndentController();
 const userController = new UserController();
 const genericController = new GenericController();
 const uploadController = new UploadController();
+const stageResetController = new StageResetController();
 
 // ==================== USER ROUTES ====================
 router.get('/users', userController.getUsers);
@@ -46,6 +49,17 @@ router.patch('/indents/number/:indentNumber/store-out-approval', validate(update
 router.delete('/indents/:id', indentController.deleteIndent);
 router.post('/indents/:id/reset-stage', indentController.resetStage);
 router.delete('/indents/:id/stage/:stage', indentController.resetStage);
+
+// ==================== STAGE RESET ROUTES (WORKFLOW PIPELINE) ====================
+router.post('/stage-reset/lifting', stageResetController.resetLifting);
+router.post('/stage-reset/store-in/:id', stageResetController.resetStoreInStage);
+router.delete('/stage-reset/store-in/:id/stage/:stage', stageResetController.resetStoreInStage);
+router.post('/stage-reset/payments/:id', stageResetController.resetPaymentStage);
+router.delete('/stage-reset/payments/:id', stageResetController.resetPaymentStage);
+router.post('/stage-reset/fullkitting/:id', stageResetController.resetFullkittingStage);
+router.delete('/stage-reset/fullkitting/:id', stageResetController.resetFullkittingStage);
+router.post('/stage-reset/tally-entry/:id', stageResetController.resetTallyEntryStage);
+router.delete('/stage-reset/tally-entry/:id/stage/:stage', stageResetController.resetTallyEntryStage);
 
 
 // ==================== UPLOAD & FILE ROUTES ====================
