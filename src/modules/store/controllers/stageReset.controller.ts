@@ -47,5 +47,12 @@ export class StageResetController {
     const result = await this.service.resetPOCreation(poNumber);
     res.json({ success: true, message: `PO '${poNumber}' reset and deleted successfully`, data: result });
   });
+
+  resetIssueStage = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const id = Number(req.params.id || req.body.id);
+    const result = await this.service.resetIssueStage(id);
+    res.json({ success: true, message: `Issue ID ${id} approval reset to Pending successfully`, data: result });
+  });
 }
+
 

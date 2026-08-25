@@ -63,6 +63,8 @@ router.delete('/stage-reset/tally-entry/:id/stage/:stage', stageResetController.
 router.post('/stage-reset/po', stageResetController.resetPOCreation);
 router.post('/stage-reset/po/:poNumber', stageResetController.resetPOCreation);
 router.delete('/stage-reset/po/:poNumber', stageResetController.resetPOCreation);
+router.post('/stage-reset/issue/:id', stageResetController.resetIssueStage);
+router.delete('/stage-reset/issue/:id', stageResetController.resetIssueStage);
 
 
 // ==================== UPLOAD & FILE ROUTES ====================

@@ -1,5 +1,6 @@
 import { prisma } from '../../../database/prisma';
 import { PcReportService } from './pcReport.service';
+import { InventoryStockService } from './inventoryStock.service';
 
 export class StageResetService {
   private pcReportService: PcReportService;
@@ -484,5 +485,36 @@ export class StageResetService {
 
     return { success: true, count: deleteResult.count };
   }
+
+  /**
+   * Reset Issue Stage (Store Data approval reset):
+   * Resets status to Pending, clears actual1 and given_qty, and resyncs inventory stock.
+   */
+  async resetIssueStage(id: number) {
+    const existing = await prisma.issue.findUnique({
+      where: { id: BigInt(id) },
+    });
+
+    if (!existing) {
+      throw new Error(`Issue record with ID ${id} not found`);
+    }
+
+    const updated = await prisma.issue.update({
+      where: { id: BigInt(id) },
+      data: {
+        status: 'Pending',
+        actual1: null,
+        given_qty: null,
+      },
+    });
+
+    if (existing.product_name) {
+      const inventoryService = new InventoryStockService();
+      await inventoryService.syncInventoryItemAggregations(existing.product_name);
+    }
+
+    return updated;
+  }
 }
+
 
