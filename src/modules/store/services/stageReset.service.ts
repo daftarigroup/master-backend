@@ -440,4 +440,49 @@ export class StageResetService {
 
     return updated;
   }
+
+  /**
+   * Reset PO Creation Stage:
+   * 1. Resets linked indent records (clears po_number, po_copy, actual4, planned5, time_delay4)
+   * 2. Clears / resets downstream store_in records if any were created for this PO
+   * 3. Deletes all records from po_master for this po_number
+   * 4. Recalculates affected stage KPIs
+   */
+  async resetPOCreation(poNumber: string) {
+    if (!poNumber || !poNumber.trim()) {
+      throw new Error('PO Number is required to reset PO Creation');
+    }
+
+    const cleanPo = poNumber.trim();
+
+    // 1. Reset matching indents so they move back to Pending PO to Make
+    await prisma.indent.updateMany({
+      where: { po_number: cleanPo },
+      data: {
+        po_number: null,
+        po_copy: null,
+        actual4: null,
+        planned5: null,
+        time_delay4: null,
+      },
+    });
+
+    // 2. Delete downstream store_in records if any were created for this PO
+    await prisma.storeIn.deleteMany({
+      where: { po_number: cleanPo },
+    });
+
+    // 3. Delete po_master records
+    const deleteResult = await prisma.poMaster.deleteMany({
+      where: { po_number: cleanPo },
+    });
+
+    // 4. Recalculate KPIs
+    await this.pcReportService.recalculateStageKpis('Approval And Rejection For Purchase');
+    await this.pcReportService.recalculateStageKpis('PO WebApp');
+    await this.pcReportService.recalculateStageKpis('Material Lifting');
+
+    return { success: true, count: deleteResult.count };
+  }
 }
+

@@ -41,4 +41,11 @@ export class StageResetController {
     const updated = await this.service.resetTallyEntryStage(id, stage);
     res.json({ success: true, message: `Tally entry stage '${stage}' reset successfully`, data: updated });
   });
+
+  resetPOCreation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const poNumber = String(req.body.poNumber || req.params.poNumber || '').trim();
+    const result = await this.service.resetPOCreation(poNumber);
+    res.json({ success: true, message: `PO '${poNumber}' reset and deleted successfully`, data: result });
+  });
 }
+

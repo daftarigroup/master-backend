@@ -60,6 +60,9 @@ router.post('/stage-reset/fullkitting/:id', stageResetController.resetFullkittin
 router.delete('/stage-reset/fullkitting/:id', stageResetController.resetFullkittingStage);
 router.post('/stage-reset/tally-entry/:id', stageResetController.resetTallyEntryStage);
 router.delete('/stage-reset/tally-entry/:id/stage/:stage', stageResetController.resetTallyEntryStage);
+router.post('/stage-reset/po', stageResetController.resetPOCreation);
+router.post('/stage-reset/po/:poNumber', stageResetController.resetPOCreation);
+router.delete('/stage-reset/po/:poNumber', stageResetController.resetPOCreation);
 
 
 // ==================== UPLOAD & FILE ROUTES ====================
