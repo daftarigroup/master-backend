@@ -68,13 +68,14 @@ export const documentsRepository = {
     };
 
     if (filters.take !== undefined) {
+      const safeTake = Math.min(Math.max(filters.take, 1), 500);
       const [items, total] = await Promise.all([
         prisma.docDocument.findMany({
           where,
           select: filters.includeContent ? undefined : documentListSelect,
           orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
           skip: filters.skip || 0,
-          take: filters.take,
+          take: safeTake,
         }),
         prisma.docDocument.count({ where }),
       ]);

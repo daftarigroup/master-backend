@@ -71,8 +71,11 @@ export const ledgerService = {
         : {}),
     };
 
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 500);
+    const safePage = Math.max(Number(page) || 1, 1);
+
     const [rows, total] = await Promise.all([
-      ledgerRepository.findMany(where, { skip: (page - 1) * limit, take: Number(limit) }),
+      ledgerRepository.findMany(where, { skip: (safePage - 1) * safeLimit, take: safeLimit }),
       ledgerRepository.count(where),
     ]);
 
@@ -81,7 +84,7 @@ export const ledgerService = {
       referenceId: credit?.sn || expense?.sn || null,
     }));
 
-    return { entries, total, page: Number(page), limit: Number(limit) };
+    return { entries, total, page: safePage, limit: safeLimit };
   },
 
   async getBalance(personName: string) {

@@ -17,7 +17,24 @@ const pool = new pg.Pool({
 
 const adapter = new PrismaPg(pool);
 
-export const prisma = new PrismaClient({ adapter });
+const basePrisma = new PrismaClient({ adapter });
+
+// Query Timing Middleware Extension (logs any query exceeding 200ms as [SLOW QUERY])
+export const prisma: PrismaClient = basePrisma.$extends({
+  query: {
+    $allModels: {
+      async $allOperations({ model, operation, args, query }) {
+        const start = performance.now();
+        const result = await query(args);
+        const duration = performance.now() - start;
+        if (duration > 200) {
+          console.warn(`⚠️ [SLOW QUERY] ${model}.${operation} took ${duration.toFixed(1)}ms`);
+        }
+        return result;
+      },
+    },
+  },
+}) as unknown as PrismaClient;
 
 // BigInt JSON serialization fix
 (BigInt.prototype as any).toJSON = function () {

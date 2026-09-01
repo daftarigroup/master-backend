@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { LRUCache } from 'lru-cache';
+import crypto from 'crypto';
 import { prisma } from '../../../database/prisma';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ApiError } from '../../../utils/ApiError';
@@ -8,6 +10,113 @@ import { SchedulePlannerService } from '../services/schedulePlanner.service';
 import { DelayCalculatorService } from '../services/delayCalculator.service';
 import { InventoryStockService } from '../services/inventoryStock.service';
 import { PcReportService } from '../services/pcReport.service';
+
+// ============================================================
+// Per-table TTL configuration based on update frequency:
+// - Near-static reference/lookup tables: 5 minutes (300_000 ms)
+// - Directory / config tables: 2 minutes (120_000 ms)
+// - High-velocity transactional tables: 30 seconds (30_000 ms)
+// ============================================================
+export const TABLE_TTL_CONFIG: Record<string, { ttl: number; isPublic: boolean }> = {
+  // Static Reference & Calendars (Changes rarely via admin)
+  department: { ttl: 300_000, isPublic: true },
+  uom: { ttl: 300_000, isPublic: false },
+  area_of_use: { ttl: 300_000, isPublic: false },
+  default_po_terms: { ttl: 300_000, isPublic: false },
+  terms_and_condition: { ttl: 300_000, isPublic: false },
+  company: { ttl: 300_000, isPublic: false },
+  holiday: { ttl: 300_000, isPublic: true },
+  working_day_calendar: { ttl: 300_000, isPublic: true },
+
+  // Directory / Master Tables (Changes occasionally)
+  firm: { ttl: 120_000, isPublic: false },
+  item: { ttl: 120_000, isPublic: false },
+  group_head: { ttl: 120_000, isPublic: false },
+  vendors: { ttl: 120_000, isPublic: false },
+  contractor_details: { ttl: 120_000, isPublic: false },
+  site_location_details: { ttl: 120_000, isPublic: false },
+  site_engineer_details: { ttl: 120_000, isPublic: false },
+
+  // High-Velocity Transactional Tables (Changes frequently by operational users)
+  indent: { ttl: 30_000, isPublic: false },
+  store_in: { ttl: 30_000, isPublic: false },
+  store_in_direct: { ttl: 30_000, isPublic: false },
+  po_master: { ttl: 30_000, isPublic: false },
+  issue: { ttl: 30_000, isPublic: false },
+  tally_entry: { ttl: 30_000, isPublic: false },
+  fullkitting: { ttl: 30_000, isPublic: false },
+  payments: { ttl: 30_000, isPublic: false },
+  payment_history: { ttl: 30_000, isPublic: false },
+  inventory: { ttl: 30_000, isPublic: false },
+  pc_report: { ttl: 30_000, isPublic: false },
+};
+
+const DEFAULT_TABLE_TTL = { ttl: 30_000, isPublic: false };
+
+// LRU Query Result Cache
+export const queryCache = new LRUCache<string, any>({
+  max: 200, // Maximum 200 cached query results
+  ttl: 30_000, // Fallback TTL
+});
+
+// Dependency map: tables whose caches must be invalidated when a mutation occurs on a linked table
+const TABLE_INVALIDATION_DEPENDENCIES: Record<string, string[]> = {
+  indent: ['indent', 'inventory', 'pc_report'],
+  store_in: ['store_in', 'inventory', 'pc_report'],
+  store_in_direct: ['store_in_direct', 'store_in'],
+  issue: ['issue', 'inventory', 'pc_report'],
+  tally_entry: ['tally_entry', 'pc_report'],
+  holiday: ['holiday', 'working_day_calendar'],
+};
+
+/**
+ * Invalidate cached query results for the mutated table and its downstream dependencies
+ */
+export function invalidateTableCache(table: string) {
+  const tablesToInvalidate = TABLE_INVALIDATION_DEPENDENCIES[table] || [table];
+  const keysToDelete: string[] = [];
+
+  for (const key of queryCache.keys()) {
+    for (const t of tablesToInvalidate) {
+      if (key.startsWith(`${t}:`)) {
+        keysToDelete.push(key);
+        break;
+      }
+    }
+  }
+
+  for (const key of keysToDelete) {
+    queryCache.delete(key);
+  }
+
+  if (keysToDelete.length > 0) {
+    console.log(`🧹 [CACHE INVALIDATED] '${table}' mutation purged ${keysToDelete.length} cache key(s) (${tablesToInvalidate.join(', ')})`);
+  }
+}
+
+/**
+ * Helper to attach ETag and Cache-Control headers, and handle 304 Not Modified
+ */
+function sendCachedResponse(req: Request, res: Response, table: string, responseData: any) {
+  const tableConfig = TABLE_TTL_CONFIG[table] || DEFAULT_TABLE_TTL;
+  const maxAgeSec = Math.round(tableConfig.ttl / 1000);
+  const cacheControl = tableConfig.isPublic
+    ? `public, max-age=${maxAgeSec}`
+    : `private, max-age=${maxAgeSec}`;
+
+  // Generate strong MD5 ETag
+  const etag = `"${crypto.createHash('md5').update(JSON.stringify(responseData)).digest('hex')}"`;
+
+  res.setHeader('ETag', etag);
+  res.setHeader('Cache-Control', cacheControl);
+
+  const ifNoneMatch = req.headers['if-none-match'];
+  if (ifNoneMatch && ifNoneMatch === etag) {
+    return res.status(304).end();
+  }
+
+  return res.json(responseData);
+}
 
 // Convert snake_case table name to camelCase Prisma model key
 function getModelKey(tableName: string): string {
@@ -222,42 +331,51 @@ function parseWhereFilters(tableName: string, filters: Record<string, any>): Rec
 
       if (key.startsWith('in__')) {
         const col = key.slice(4);
+        if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
         const items = String(rawVal).split(',').map((item) => castValueForField(fieldType, col, item.trim()));
         where[col] = { in: items };
       } else if (key.startsWith('neq__')) {
         const col = key.slice(5);
+        if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
         where[col] = { not: castValueForField(fieldType, col, rawVal) };
       } else if (key.startsWith('ilike__')) {
         const col = key.slice(7);
+        if (!fieldsMap[col]) return;
         const cleaned = String(rawVal).replace(/%/g, '');
         where[col] = { contains: cleaned, mode: 'insensitive' };
       } else if (key.startsWith('gte__')) {
         const col = key.slice(5);
+        if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
         where[col] = { gte: castValueForField(fieldType, col, rawVal) };
       } else if (key.startsWith('lte__')) {
         const col = key.slice(5);
+        if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
         where[col] = { lte: castValueForField(fieldType, col, rawVal) };
       } else if (key.startsWith('gt__')) {
         const col = key.slice(4);
+        if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
         where[col] = { gt: castValueForField(fieldType, col, rawVal) };
       } else if (key.startsWith('lt__')) {
         const col = key.slice(4);
+        if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
         where[col] = { lt: castValueForField(fieldType, col, rawVal) };
       } else {
-        const fieldType = fieldsMap[key]?.type;
-        where[key] = castValueForField(fieldType, key, rawVal);
+        // Only include exact-match filters if the field exists on the Prisma model schema
+        if (fieldsMap[key]) {
+          const fieldType = fieldsMap[key]?.type;
+          where[key] = castValueForField(fieldType, key, rawVal);
+        }
       }
     }
   });
 
   return where;
-
 }
 
 // Normalize all fields in a request body using Prisma model schema metadata
@@ -290,6 +408,11 @@ const TABLE_INCLUDES: Record<string, Record<string, any>> = {
   group_head: { firm: true },
   uom: { firm: true },
   area_of_use: { firm: true },
+  inventory: { firm: true },
+  po_master: { firm: true },
+  payments: { firm: true },
+  stock_transfers: { from_firm: true, to_firm: true },
+  fullkitting: { firm: true },
 };
 
 export class GenericController {
@@ -297,11 +420,42 @@ export class GenericController {
   getEntities = asyncHandler(async (req: Request, res: Response) => {
     const table = req.params.table as string;
     const model = getPrismaModel(table);
+    const fieldsMap = getModelFields(table);
 
-    const { limit, _limit, offset, page, _range, order, select, ...filters } = req.query;
+    const { limit, _limit, offset, page, _range, order, select, cursor, cursor_field, ...filters } = req.query;
 
     const where = parseWhereFilters(table, filters);
+
+    // Keyset / Cursor-based Pagination support (WHERE timestamp < :cursorTs OR (timestamp = :cursorTs AND id < :cursorId))
+    if (cursor && typeof cursor === 'string') {
+      let cursorObj: any = null;
+      try {
+        const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+        cursorObj = JSON.parse(decoded);
+      } catch {
+        if (/^\d+$/.test(cursor)) {
+          cursorObj = { id: BigInt(cursor) };
+        }
+      }
+
+      if (cursorObj) {
+        if (cursorObj.timestamp && cursorObj.id && fieldsMap['timestamp']) {
+          const cursorTs = new Date(cursorObj.timestamp);
+          const cursorId = BigInt(cursorObj.id);
+          where.OR = [
+            { timestamp: { lt: cursorTs } },
+            { timestamp: cursorTs, id: { lt: cursorId } },
+          ];
+        } else if (cursorObj.id) {
+          where.id = { lt: BigInt(cursorObj.id) };
+        }
+      }
+    }
+
     const queryOptions: any = { where };
+
+    const MAX_LIMIT = 500;
+    const DEFAULT_LIMIT = 500;
 
     let take: number | undefined;
     let skip: number | undefined;
@@ -310,13 +464,17 @@ export class GenericController {
       const parts = _range.split(',').map((s) => parseInt(s.trim(), 10));
       if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
         skip = parts[0];
-        take = parts[1] - parts[0] + 1;
+        take = Math.min(parts[1] - parts[0] + 1, MAX_LIMIT);
       }
     } else {
       const limitVal = limit || _limit;
       if (limitVal) {
-        take = parseInt(limitVal as string, 10);
+        take = Math.min(parseInt(limitVal as string, 10) || DEFAULT_LIMIT, MAX_LIMIT);
+      } else {
+        // Enforce default cap when no limit supplied to prevent unbounded full-table dumps
+        take = DEFAULT_LIMIT;
       }
+
       if (offset) {
         skip = parseInt(offset as string, 10);
       } else if (page && take) {
@@ -328,29 +486,66 @@ export class GenericController {
     }
 
     if (take !== undefined && !isNaN(take) && take > 0) {
-      queryOptions.take = take;
+      // Fetch 1 extra record to reliably determine hasMore without issuing a separate COUNT query
+      queryOptions.take = take + 1;
     }
     if (skip !== undefined && !isNaN(skip) && skip >= 0) {
       queryOptions.skip = skip;
     }
 
+    // Compound tiebreaker ordering to guarantee stable keyset pagination
     if (order && typeof order === 'string') {
       const [field, direction] = order.split('.');
-      if (field) {
-        queryOptions.orderBy = { [field]: direction === 'desc' ? 'desc' : 'asc' };
+      if (field && fieldsMap[field]) {
+        const dir = direction === 'desc' ? 'desc' : 'asc';
+        queryOptions.orderBy = field !== 'id' ? [{ [field]: dir }, { id: dir }] : [{ id: dir }];
+      } else {
+        queryOptions.orderBy = [{ id: 'desc' }];
       }
+    } else {
+      queryOptions.orderBy = [{ id: 'desc' }];
     }
 
     if (TABLE_INCLUDES[table]) {
       queryOptions.include = TABLE_INCLUDES[table];
     }
 
-    const records = await model.findMany(queryOptions);
+    // --- LRU Cache Check ---
+    const cacheKey = `${table}:${JSON.stringify(queryOptions)}`;
+    const cachedResponse = queryCache.get(cacheKey);
+    if (cachedResponse) {
+      console.log(`⚡ [CACHE HIT] '${table}' (params: ${JSON.stringify(req.query)})`);
+      return sendCachedResponse(req, res, table, cachedResponse);
+    }
 
-    res.json({
+    console.log(`🔍 [CACHE MISS] '${table}' -> querying DB (params: ${JSON.stringify(req.query)})`);
+    const fetchedRecords = await model.findMany(queryOptions);
+
+    const actualTake = take || DEFAULT_LIMIT;
+    const hasMore = fetchedRecords.length > actualTake;
+    const records = hasMore ? fetchedRecords.slice(0, actualTake) : fetchedRecords;
+
+    let nextCursor: string | null = null;
+    if (hasMore && records.length > 0) {
+      const lastRecord = records[records.length - 1];
+      const cursorPayload: any = { id: lastRecord.id ? String(lastRecord.id) : undefined };
+      if (lastRecord.timestamp) {
+        cursorPayload.timestamp = lastRecord.timestamp;
+      }
+      nextCursor = Buffer.from(JSON.stringify(cursorPayload)).toString('base64');
+    }
+
+    const responsePayload = {
       success: true,
       data: records,
-    });
+      hasMore,
+      nextCursor,
+    };
+
+    const tableConfig = TABLE_TTL_CONFIG[table] || DEFAULT_TABLE_TTL;
+    queryCache.set(cacheKey, responsePayload, { ttl: tableConfig.ttl });
+
+    return sendCachedResponse(req, res, table, responsePayload);
   });
 
   // GET /api/store/entity/:table/:id
@@ -359,6 +554,15 @@ export class GenericController {
     const id = req.params.id as string;
     const model = getPrismaModel(table);
 
+    // --- LRU Cache Check ---
+    const cacheKey = `${table}:id:${id}`;
+    const cachedResponse = queryCache.get(cacheKey);
+    if (cachedResponse) {
+      console.log(`⚡ [CACHE HIT] '${table}/${id}'`);
+      return sendCachedResponse(req, res, table, cachedResponse);
+    }
+
+    console.log(`🔍 [CACHE MISS] '${table}/${id}' -> querying DB`);
     const numericId = isNaN(Number(id)) ? id : BigInt(id);
 
     const findOptions: any = {
@@ -375,10 +579,15 @@ export class GenericController {
       throw new ApiError(404, `Record with ID '${id}' not found in '${table}'`);
     }
 
-    res.json({
+    const responsePayload = {
       success: true,
       data: record,
-    });
+    };
+
+    const tableConfig = TABLE_TTL_CONFIG[table] || DEFAULT_TABLE_TTL;
+    queryCache.set(cacheKey, responsePayload, { ttl: tableConfig.ttl });
+
+    return sendCachedResponse(req, res, table, responsePayload);
   });
 
   // POST /api/store/entity/:table
@@ -514,6 +723,9 @@ export class GenericController {
       }
     });
 
+    // Invalidate cached query results for the mutated table and dependencies
+    invalidateTableCache(table);
+
     res.status(201).json({
       success: true,
       data: result,
@@ -647,13 +859,16 @@ export class GenericController {
       return updatedRecord;
     });
 
+    // Invalidate cached query results for the mutated table and dependencies
+    invalidateTableCache(table);
+
     res.json({
       success: true,
       data: updated,
     });
   });
 
-  // PATCH /api/store/entity/:table (bulk update with filters)
+  // PATCH / api / store / entity /: table(bulk update with filters)
   updateEntities = asyncHandler(async (req: Request, res: Response) => {
     const table = req.params.table as string;
     const { where = {}, data = {} } = req.body;
@@ -668,6 +883,9 @@ export class GenericController {
         data: normalizedData,
       });
     });
+
+    // Invalidate cached query results for the mutated table and dependencies
+    invalidateTableCache(table);
 
     res.json({
       success: true,
@@ -709,6 +927,9 @@ export class GenericController {
         where: { id: numericId },
       });
     });
+
+    // Invalidate cached query results for the mutated table and dependencies
+    invalidateTableCache(table);
 
     res.json({
       success: true,
