@@ -321,6 +321,9 @@ function castValueForField(fieldType: string | undefined, key: string, val: any)
 function parseWhereFilters(tableName: string, filters: Record<string, any>): Record<string, any> {
   const fieldsMap = getModelFields(tableName);
   const where: Record<string, any> = {};
+  // Collects or__colName=value pairs so multiple such keys combine into a single
+  // WHERE (col1 = value1 OR col2 = value2 OR ...) instead of each being ANDed separately.
+  const orConditions: Record<string, any>[] = [];
 
   Object.keys(filters).forEach((key) => {
     const rawVal = filters[key];
@@ -345,7 +348,13 @@ function parseWhereFilters(tableName: string, filters: Record<string, any>): Rec
     } else {
       if (rawVal === undefined || rawVal === null || rawVal === '') return;
 
-      if (key.startsWith('in__')) {
+      if (key.startsWith('or__')) {
+        // or__colName=value → this condition is OR'd together with every other or__ condition
+        const col = key.slice(4);
+        if (!fieldsMap[col]) return;
+        const fieldType = fieldsMap[col]?.type;
+        orConditions.push({ [col]: castValueForField(fieldType, col, rawVal) });
+      } else if (key.startsWith('in__')) {
         const col = key.slice(4);
         if (!fieldsMap[col]) return;
         const fieldType = fieldsMap[col]?.type;
@@ -390,6 +399,10 @@ function parseWhereFilters(tableName: string, filters: Record<string, any>): Rec
       }
     }
   });
+
+  if (orConditions.length > 0) {
+    where.OR = orConditions;
+  }
 
   return where;
 }
