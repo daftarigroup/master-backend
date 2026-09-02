@@ -67,6 +67,19 @@ const TABLE_INVALIDATION_DEPENDENCIES: Record<string, string[]> = {
   issue: ['issue', 'inventory', 'pc_report'],
   tally_entry: ['tally_entry', 'pc_report'],
   holiday: ['holiday', 'working_day_calendar'],
+  group_head: ['group_head', 'item', 'inventory'],
+  uom: ['uom', 'item', 'inventory'],
+  area_of_use: ['area_of_use', 'indent'],
+  firm: ['firm', 'company', 'item', 'vendors', 'contractor_details', 'site_location_details', 'site_engineer_details', 'inventory', 'indent'],
+  company: ['company', 'firm'],
+  vendors: ['vendors', 'po_master', 'indent', 'store_in'],
+  item: ['item', 'inventory', 'indent', 'store_in', 'issue', 'fullkitting'],
+  contractor_details: ['contractor_details', 'issue'],
+  site_location_details: ['site_location_details', 'issue', 'indent'],
+  site_engineer_details: ['site_engineer_details', 'po_master', 'indent'],
+  department: ['department', 'indent'],
+  default_po_terms: ['default_po_terms', 'terms_and_condition', 'po_master'],
+  terms_and_condition: ['terms_and_condition', 'default_po_terms'],
 };
 
 /**
@@ -94,21 +107,24 @@ export function invalidateTableCache(table: string) {
   }
 }
 
+export function clearAllQueryCache() {
+  queryCache.clear();
+  console.log(`🧹 [CACHE INVALIDATED] Cleared entire queryCache.`);
+}
+
 /**
  * Helper to attach ETag and Cache-Control headers, and handle 304 Not Modified
  */
 function sendCachedResponse(req: Request, res: Response, table: string, responseData: any) {
-  const tableConfig = TABLE_TTL_CONFIG[table] || DEFAULT_TABLE_TTL;
-  const maxAgeSec = Math.round(tableConfig.ttl / 1000);
-  const cacheControl = tableConfig.isPublic
-    ? `public, max-age=${maxAgeSec}`
-    : `private, max-age=${maxAgeSec}`;
+  // Prevent browser disk/memory caching so frontend always fetches real-time updates immediately,
+  // while backend LRU queryCache provides ultra-fast in-memory responses for un-mutated data.
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
-  // Generate strong MD5 ETag
+  // Strong MD5 ETag
   const etag = `"${crypto.createHash('md5').update(JSON.stringify(responseData)).digest('hex')}"`;
-
   res.setHeader('ETag', etag);
-  res.setHeader('Cache-Control', cacheControl);
 
   const ifNoneMatch = req.headers['if-none-match'];
   if (ifNoneMatch && ifNoneMatch === etag) {
@@ -422,9 +438,69 @@ export class GenericController {
     const model = getPrismaModel(table);
     const fieldsMap = getModelFields(table);
 
-    const { limit, _limit, offset, page, _range, order, select, cursor, cursor_field, ...filters } = req.query;
+    const { limit, _limit, offset, page, _range, order, select, cursor, cursor_field, q, search, search_fields, ...filters } = req.query;
 
     const where = parseWhereFilters(table, filters);
+
+    // Database search across fields and relations
+    const searchTerm = String(q || search || '').trim();
+    if (searchTerm) {
+      const searchFieldsList = search_fields && typeof search_fields === 'string'
+        ? search_fields.split(',').map((s) => s.trim()).filter(Boolean)
+        : Object.keys(fieldsMap).filter((k) => fieldsMap[k]?.type === 'String');
+
+      const searchConditions: any[] = [];
+      for (const field of searchFieldsList) {
+        if (field.includes('.')) {
+          const [relation, relField] = field.split('.');
+          if (TABLE_INCLUDES[table]?.[relation] || fieldsMap[relation]) {
+            searchConditions.push({
+              [relation]: {
+                [relField]: { contains: searchTerm, mode: 'insensitive' },
+              },
+            });
+          }
+        } else if (fieldsMap[field]) {
+          if (fieldsMap[field].type === 'String') {
+            searchConditions.push({ [field]: { contains: searchTerm, mode: 'insensitive' } });
+          } else if (fieldsMap[field].type === 'Int' || fieldsMap[field].type === 'BigInt') {
+            if (/^\d+$/.test(searchTerm)) {
+              searchConditions.push({ [field]: Number(searchTerm) });
+            }
+          }
+        }
+      }
+
+      // Add common relation searches for entities if search_fields wasn't specifically provided
+      if (!search_fields) {
+        if (table === 'item') {
+          searchConditions.push(
+            { group_head: { name: { contains: searchTerm, mode: 'insensitive' } } },
+            { uom: { name: { contains: searchTerm, mode: 'insensitive' } } },
+            { firm: { firm_name: { contains: searchTerm, mode: 'insensitive' } } }
+          );
+        } else if (table === 'vendors' || table === 'contractor_details' || table === 'site_location_details' || table === 'site_engineer_details' || table === 'group_head' || table === 'uom' || table === 'area_of_use') {
+          searchConditions.push(
+            { firm: { firm_name: { contains: searchTerm, mode: 'insensitive' } } }
+          );
+        } else if (table === 'firm') {
+          searchConditions.push(
+            { company: { company_name: { contains: searchTerm, mode: 'insensitive' } } }
+          );
+        }
+      }
+
+      if (searchConditions.length > 0) {
+        if (where.AND && Array.isArray(where.AND)) {
+          where.AND.push({ OR: searchConditions });
+        } else if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+          delete where.OR;
+        } else {
+          where.OR = searchConditions;
+        }
+      }
+    }
 
     // Keyset / Cursor-based Pagination support (WHERE timestamp < :cursorTs OR (timestamp = :cursorTs AND id < :cursorId))
     if (cursor && typeof cursor === 'string') {
@@ -454,8 +530,8 @@ export class GenericController {
 
     const queryOptions: any = { where };
 
-    const MAX_LIMIT = 500;
-    const DEFAULT_LIMIT = 500;
+    const MAX_LIMIT = 5000;
+    const DEFAULT_LIMIT = 100;
 
     let take: number | undefined;
     let skip: number | undefined;
@@ -468,10 +544,11 @@ export class GenericController {
       }
     } else {
       const limitVal = limit || _limit;
-      if (limitVal) {
+      if (limitVal === 'all' || limitVal === '-1' || limitVal === '0') {
+        take = 50000;
+      } else if (limitVal) {
         take = Math.min(parseInt(limitVal as string, 10) || DEFAULT_LIMIT, MAX_LIMIT);
       } else {
-        // Enforce default cap when no limit supplied to prevent unbounded full-table dumps
         take = DEFAULT_LIMIT;
       }
 

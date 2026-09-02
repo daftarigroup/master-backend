@@ -17,7 +17,7 @@ app.use(cors({
   origin: true, // Reflect request origin to allow credentials from any origin during dev
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma', 'Expires', 'If-None-Match'],
 }));
 
 app.use(helmet({ crossOriginResourcePolicy: false }));

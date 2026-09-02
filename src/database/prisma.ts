@@ -13,6 +13,14 @@ const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(connectionUrl.hos
 const pool = new pg.Pool({
   connectionString: connectionUrl.toString(),
   ssl: isLocalHost ? false : { rejectUnauthorized: false },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+});
+
+pool.on('error', (err) => {
+  console.error('⚠️ Unexpected error on idle PostgreSQL pool client:', err.message);
 });
 
 const adapter = new PrismaPg(pool);
