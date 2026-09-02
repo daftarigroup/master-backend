@@ -69,9 +69,10 @@ export class UploadController {
     }
 
     const s3Key = extractS3Key(rawTarget);
+    const s3Configured = !!(config.aws.bucket && config.aws.accessKey && config.aws.secretKey);
 
     // 1. Try fetching from S3 if credentials exist
-    if (config.aws.bucket && config.aws.accessKey && config.aws.secretKey) {
+    if (s3Configured) {
       try {
         const s3Data = await getObjectFromS3(s3Key);
         if (s3Data && s3Data.Body) {
@@ -94,6 +95,8 @@ export class UploadController {
       } catch (s3Err: any) {
         console.warn(`S3 fetch failed for key '${s3Key}' (Bucket: ${config.aws.bucket}):`, s3Err?.message || s3Err);
       }
+    } else {
+      console.warn(`S3 not configured (missing AWS_BUCKET/AWS_ACCESS_KEY/AWS_SECRET_KEY) — skipping S3 lookup for key '${s3Key}'`);
     }
 
     // 2. Fallback to local ./uploads directory
@@ -102,6 +105,7 @@ export class UploadController {
       return res.sendFile(localFilePath);
     }
 
+    console.warn(`File not found for key '${s3Key}' — checked ${s3Configured ? 'S3 and ' : ''}local disk at '${localFilePath}'`);
     throw new ApiError(404, 'File not found');
   });
 }

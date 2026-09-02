@@ -1,9 +1,19 @@
 import app from './app/app';
-import { config } from './config';
+import { config, getAwsConfigStatus } from './config';
 import { syncAllSequences } from './modules/store/controllers/generic.controller';
 
 const server = app.listen(config.port, () => {
   console.log(`🚀 Master Backend server running on port ${config.port} in ${config.env} mode`);
+
+  const awsStatus = getAwsConfigStatus();
+  if (awsStatus.configured) {
+    console.log(`✅ S3 configured — bucket: ${awsStatus.bucket}, region: ${awsStatus.region}`);
+  } else {
+    console.warn(
+      `⚠️ S3 not fully configured (accessKeySet: ${awsStatus.accessKeySet}, secretKeySet: ${awsStatus.secretKeySet}, bucket: ${awsStatus.bucket || 'unset'}) — file uploads/reads will fall back to local disk`
+    );
+  }
+
   syncAllSequences().catch((err) => {
     console.warn('⚠️ Sequence sync on startup notice:', err);
   });

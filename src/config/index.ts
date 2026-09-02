@@ -26,3 +26,22 @@ export const config = {
     fromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
   },
 };
+
+/**
+ * Safe-to-log snapshot of the S3 config: confirms the AWS_* env vars were
+ * actually picked up by this running process, without ever exposing the
+ * access key or secret key values themselves (only presence/absence).
+ * Use this to verify a deployed environment's config from startup logs or
+ * the /health endpoint instead of the values from .env — a key can be set in
+ * the hosting dashboard yet not reach the running process (wrong var name,
+ * env not injected, process not restarted after the change, etc).
+ */
+export function getAwsConfigStatus() {
+  return {
+    configured: !!(config.aws.bucket && config.aws.accessKey && config.aws.secretKey),
+    region: config.aws.region || null,
+    bucket: config.aws.bucket || null,
+    accessKeySet: !!config.aws.accessKey,
+    secretKeySet: !!config.aws.secretKey,
+  };
+}
