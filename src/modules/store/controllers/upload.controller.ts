@@ -1,111 +1,115 @@
 import { Request, Response } from 'express';
-import path from 'path';
-import fs from 'fs';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ApiError } from '../../../utils/ApiError';
-import { uploadBufferToS3, getObjectFromS3 } from '../../../services/s3.service';
-import { config } from '../../../config/index';
-
-function extractS3Key(pathOrUrl: string): string {
-  let cleaned = pathOrUrl.trim();
-  try {
-    cleaned = decodeURIComponent(cleaned);
-  } catch (_) {}
-  // Strip query strings if present
-  cleaned = cleaned.split('?')[0];
-  // Strip full protocol and domain 
-  cleaned = cleaned.replace(/^https?:\/\/[^\/]+\//i, '');
-  // Strip leading slashes and prefix paths
-  cleaned = cleaned.replace(/^\/+/, '').replace(/^uploads\//i, '').replace(/^api\/store\/files\//i, '');
-  return cleaned;
-}
+import {
+  headObjectFromS3,
+  getPresignedGetUrl,
+  getPresignedPutUrl,
+  buildUploadKey,
+  buildS3PublicUrl,
+  extractS3KeyFromUrl,
+  deleteObjectFromS3,
+} from '../../../services/s3.service';
+import { getAwsConfigStatus } from '../../../config/index';
 
 export class UploadController {
-  // POST /api/store/upload
-  uploadFile = asyncHandler(async (req: Request, res: Response) => {
-    const file = (req as any).file;
+  // POST /api/store/upload/presign
+  // Issues a time-limited URL the browser PUTs the file to directly. File
+  // bytes never touch this server, and there is no fallback: if S3 isn't
+  // configured (or is explicitly disabled via DISABLE_PRESIGNED_UPLOADS)
+  // this responds 503 and the upload fails outright rather than degrading
+  // to any server-mediated or local-disk path.
+  presignUpload = asyncHandler(async (req: Request, res: Response) => {
+    const awsStatus = getAwsConfigStatus();
+    const disabled = String(process.env.DISABLE_PRESIGNED_UPLOADS || '').toLowerCase() === 'true';
 
-    if (!file) {
-      throw new ApiError(400, 'No file provided');
+    if (!awsStatus.configured || disabled) {
+      res.status(503).json({
+        success: false,
+        code: 'S3_NOT_CONFIGURED',
+        message: 'Direct-to-S3 upload is unavailable because S3 is not configured on the server.',
+      });
+      return;
     }
 
-    const bucket = String(req.body.bucket || 'misc').trim();
-    const pathName = String(req.body.path || file.originalname).trim();
-    const key = `${bucket}/${pathName}`.replace(/^\/+/, '');
+    const bucket = String(req.body?.bucket || '').trim();
+    const pathName = String(req.body?.path || '').trim();
+    const contentType = String(req.body?.contentType || 'application/octet-stream').trim();
 
-    let url: string;
-    if (config.aws.bucket && config.aws.accessKey && config.aws.secretKey) {
-      try {
-        url = await uploadBufferToS3(key, file.buffer, file.mimetype);
-      } catch (s3Err: any) {
-        console.error('AWS S3 Upload failed, saving to local uploads fallback:', s3Err?.message || s3Err);
-        const localDirPath = path.join(__dirname, '../../../../uploads', path.dirname(key));
-        fs.mkdirSync(localDirPath, { recursive: true });
-        const localFilePath = path.join(__dirname, '../../../../uploads', key);
-        fs.writeFileSync(localFilePath, file.buffer);
-        url = `/uploads/${key}`;
-      }
-    } else {
-      console.warn('AWS S3 credentials not set in environment. Saving to local uploads folder.');
-      const localDirPath = path.join(__dirname, '../../../../uploads', path.dirname(key));
-      fs.mkdirSync(localDirPath, { recursive: true });
-      const localFilePath = path.join(__dirname, '../../../../uploads', key);
-      fs.writeFileSync(localFilePath, file.buffer);
-      url = `/uploads/${key}`;
+    if (!bucket || !pathName) {
+      throw new ApiError(400, 'bucket and path are required');
     }
+
+    const key = buildUploadKey(bucket, pathName);
+    const uploadUrl = await getPresignedPutUrl(key, contentType);
+    const publicUrl = buildS3PublicUrl(key);
 
     res.status(201).json({
       success: true,
-      data: { path: pathName, url },
+      data: { uploadUrl, key, publicUrl, expiresIn: 300 },
     });
   });
 
-  // GET /api/store/file-proxy
+  // DELETE /api/store/upload
+  // Deletes a previously-uploaded S3 object, given its public URL or bare
+  // key. Used to clean up orphaned objects when a user removes or replaces
+  // an attachment that was already uploaded — best-effort housekeeping, not
+  // part of the primary save flow.
+  deleteUpload = asyncHandler(async (req: Request, res: Response) => {
+    const raw = String(req.body?.url || req.body?.key || '').trim();
+    if (!raw) {
+      throw new ApiError(400, 'url or key is required');
+    }
+
+    if (!getAwsConfigStatus().configured) {
+      res.status(503).json({
+        success: false,
+        code: 'S3_NOT_CONFIGURED',
+        message: 'S3 is not configured on the server.',
+      });
+      return;
+    }
+
+    const key = extractS3KeyFromUrl(raw);
+    await deleteObjectFromS3(key);
+
+    res.status(200).json({ success: true });
+  });
+
+  // GET /api/store/file-proxy?url=...[&download=1]
   // GET /api/store/files/*
+  // Redirects the browser to a short-lived presigned S3 URL rather than
+  // streaming the bytes through this server, so the file transfers directly
+  // between the browser and S3 while the bucket itself stays private.
   getFile = asyncHandler(async (req: Request, res: Response) => {
     const rawTarget = (req.query.url || req.query.key || req.params[0] || '') as string;
     if (!rawTarget) {
       throw new ApiError(400, 'No file path or URL provided');
     }
 
-    const s3Key = extractS3Key(rawTarget);
-    const s3Configured = !!(config.aws.bucket && config.aws.accessKey && config.aws.secretKey);
-
-    // 1. Try fetching from S3 if credentials exist
-    if (s3Configured) {
-      try {
-        const s3Data = await getObjectFromS3(s3Key);
-        if (s3Data && s3Data.Body) {
-          if (s3Data.ContentType) {
-            res.setHeader('Content-Type', s3Data.ContentType);
-          }
-          res.setHeader('Content-Disposition', 'inline');
-          if (s3Data.ContentLength) {
-            res.setHeader('Content-Length', s3Data.ContentLength.toString());
-          }
-
-          const stream = s3Data.Body as any;
-          if (typeof stream.pipe === 'function') {
-            return stream.pipe(res);
-          } else {
-            const bytes = await stream.transformToByteArray();
-            return res.send(Buffer.from(bytes));
-          }
-        }
-      } catch (s3Err: any) {
-        console.warn(`S3 fetch failed for key '${s3Key}' (Bucket: ${config.aws.bucket}):`, s3Err?.message || s3Err);
-      }
-    } else {
-      console.warn(`S3 not configured (missing AWS_BUCKET/AWS_ACCESS_KEY/AWS_SECRET_KEY) — skipping S3 lookup for key '${s3Key}'`);
+    if (!getAwsConfigStatus().configured) {
+      throw new ApiError(503, 'S3 is not configured on the server — files cannot be served.');
     }
 
-    // 2. Fallback to local ./uploads directory
-    const localFilePath = path.join(__dirname, '../../../../uploads', s3Key);
-    if (fs.existsSync(localFilePath)) {
-      return res.sendFile(localFilePath);
+    const s3Key = extractS3KeyFromUrl(rawTarget);
+    const wantsDownload = String(req.query.download || '') === '1';
+    const filename = typeof req.query.filename === 'string' ? req.query.filename : undefined;
+
+    // Confirm the object exists first so a missing key returns our clean JSON
+    // 404 instead of redirecting the browser to an S3 XML error page.
+    try {
+      await headObjectFromS3(s3Key);
+    } catch (s3Err: any) {
+      console.warn(`File not found in S3 for key '${s3Key}':`, s3Err?.message || s3Err);
+      throw new ApiError(404, 'File not found');
     }
 
-    console.warn(`File not found for key '${s3Key}' — checked ${s3Configured ? 'S3 and ' : ''}local disk at '${localFilePath}'`);
-    throw new ApiError(404, 'File not found');
+    const signedUrl = await getPresignedGetUrl(
+      s3Key,
+      900,
+      wantsDownload ? { filename } : undefined
+    );
+
+    return res.redirect(302, signedUrl);
   });
 }

@@ -3,6 +3,7 @@ import { ApiError } from '../../../utils/ApiError';
 import { documentsRepository } from '../repositories/documents.repository';
 import { docCounterService } from './docCounter.service';
 import { sendEmail } from '../../../utils/email';
+import { getObjectFromS3, extractS3KeyFromUrl } from '../../../services/s3.service';
 
 function safeDate(val: any, fallback: Date | null = null): Date | null {
   if (!val) return fallback;
@@ -334,18 +335,29 @@ export const documentsService = {
       const attachments: Array<{ filename: string; content?: Buffer; path?: string }> = [];
 
       for (const doc of documents) {
-        if (doc.fileContent) {
-          const matches = doc.fileContent.match(/^data:([^;]+);base64,(.+)$/);
-          if (matches && matches[2]) {
-            attachments.push({
-              filename: doc.file || `${doc.documentName || 'Document'}.pdf`,
-              content: Buffer.from(matches[2], 'base64'),
-            });
-          } else if (doc.fileContent.startsWith('http://') || doc.fileContent.startsWith('https://')) {
-            attachments.push({
-              filename: doc.file || `${doc.documentName || 'Document'}.pdf`,
-              path: doc.fileContent,
-            });
+        if (!doc.fileContent) continue;
+
+        const filename = doc.file || `${doc.documentName || 'Document'}.pdf`;
+        const matches = doc.fileContent.match(/^data:([^;]+);base64,(.+)$/);
+
+        if (matches && matches[2]) {
+          // Legacy rows: the file's bytes are inlined in the DB column.
+          attachments.push({ filename, content: Buffer.from(matches[2], 'base64') });
+        } else if (doc.fileContent.startsWith('http://') || doc.fileContent.startsWith('https://')) {
+          // Current rows hold an S3 URL. The bucket is private, so Resend
+          // cannot fetch the URL itself — pull the bytes here and attach them
+          // directly instead of handing over a link it would get denied on.
+          try {
+            const key = extractS3KeyFromUrl(doc.fileContent);
+            const s3Object = await getObjectFromS3(key);
+            const body = s3Object.Body as any;
+            const bytes = await body.transformToByteArray();
+            attachments.push({ filename, content: Buffer.from(bytes) });
+          } catch (err: any) {
+            console.error(
+              `[Document Share] Could not attach '${filename}' from storage:`,
+              err?.message || err
+            );
           }
         }
       }

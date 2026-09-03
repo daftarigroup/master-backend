@@ -4,7 +4,6 @@ import { UserController } from '../controllers/user.controller';
 import { GenericController } from '../controllers/generic.controller';
 import { UploadController } from '../controllers/upload.controller';
 import { validate } from '../../../middleware/validate.middleware';
-import { uploadSingle } from '../../../middleware/upload.middleware';
 import {
   updateIndentApprovalSchema,
   updateIndentSpecificationsSchema,
@@ -68,7 +67,8 @@ router.delete('/stage-reset/issue/:id', stageResetController.resetIssueStage);
 
 
 // ==================== UPLOAD & FILE ROUTES ====================
-router.post('/upload', uploadSingle, uploadController.uploadFile);
+router.post('/upload/presign', uploadController.presignUpload);
+router.delete('/upload', uploadController.deleteUpload);
 router.get('/file-proxy', uploadController.getFile);
 router.get('/files/*filePath', uploadController.getFile);
 

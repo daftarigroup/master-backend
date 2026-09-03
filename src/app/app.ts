@@ -4,7 +4,6 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
-import path from 'path';
 import apiRouter from '../routes';
 import { errorHandler } from '../middleware/error.middleware';
 import { authenticateJWT } from '../middleware/auth.middleware';
@@ -26,9 +25,6 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use(cookieParser());
-
-// Static file serving for uploads directory
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // Base authentication check
 app.use('/api', authenticateJWT, apiRouter);

@@ -10,7 +10,7 @@ const server = app.listen(config.port, () => {
     console.log(`✅ S3 configured — bucket: ${awsStatus.bucket}, region: ${awsStatus.region}`);
   } else {
     console.warn(
-      `⚠️ S3 not fully configured (accessKeySet: ${awsStatus.accessKeySet}, secretKeySet: ${awsStatus.secretKeySet}, bucket: ${awsStatus.bucket || 'unset'}) — file uploads/reads will fall back to local disk`
+      `⚠️ S3 not configured (accessKeySet: ${awsStatus.accessKeySet}, secretKeySet: ${awsStatus.secretKeySet}, bucket: ${awsStatus.bucket || 'unset'}) — file uploads and downloads will FAIL. There is no local-disk fallback.`
     );
   }
 
