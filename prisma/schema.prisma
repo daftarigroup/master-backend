@@ -91,9 +91,10 @@ model DefaultPoTerms {
 }
 
 model Department {
-  id         BigInt   @id @default(autoincrement())
-  name       String   @db.Text
-  created_at DateTime @default(now()) @db.Timestamptz()
+  id         BigInt     @id @default(autoincrement())
+  name       String     @db.Text
+  created_at DateTime   @default(now()) @db.Timestamptz()
+  employees  Employee[]
 
   @@map("department")
 }
@@ -135,6 +136,8 @@ model Firm {
   terms_and_condition          TermsAndCondition[]
   uom                          Uom[]
   vendors                      Vendors[]
+  project_assignments          ProjectAssignment[]
+  employees                    Employee[]         @relation("EmployeeHomeFirm")
 
   @@map("firm")
 }
@@ -917,6 +920,7 @@ model User {
   modify_access                             AccessType
   role                                      Role?      @default(USER)
   day_off                                   String?    @db.Text
+  employee                                  Employee?
 
   @@map("user")
 }
@@ -1279,4 +1283,645 @@ model DocCounter {
 
   @@map("doc_counters")
 }
+
+enum ProjectAssignmentStatus {
+  active
+  on_leave
+  shifted
+  removed
+  completed
+}
+
+enum ProjectAssignmentEventType {
+  assigned
+  resumed
+  shifted
+  removed
+  completed
+  put_on_leave
+}
+
+model ProjectAssignment {
+  id                   BigInt                  @id @default(autoincrement())
+  employee_id          String                  @db.Text
+  firm_id              BigInt
+  firm_name            String                  @db.Text
+  role_on_project      String                  @db.Text
+  status               ProjectAssignmentStatus @default(active)
+  assigned_date        DateTime                @db.Timestamptz()
+  end_date             DateTime?               @db.Timestamptz()
+  linked_assignment_id BigInt?
+  reason               String?                 @db.Text
+  approved_by          String?                 @db.Text
+  created_at           DateTime                @default(now()) @db.Timestamptz()
+  updated_at           DateTime                @default(now()) @updatedAt @db.Timestamptz()
+
+  firm                 Firm                    @relation(fields: [firm_id], references: [id])
+  employee             Employee?               @relation(fields: [employee_id], references: [employee_id])
+  linked_assignment    ProjectAssignment?      @relation("AssignmentChain", fields: [linked_assignment_id], references: [id])
+  chained_assignments  ProjectAssignment[]     @relation("AssignmentChain")
+  events               ProjectAssignmentEvent[]
+
+  @@index([employee_id])
+  @@index([firm_id])
+  @@index([status])
+  @@map("project_assignments")
+}
+
+model ProjectAssignmentEvent {
+  id             BigInt                     @id @default(autoincrement())
+  assignment_id  BigInt
+  employee_id    String                     @db.Text
+  event_type     ProjectAssignmentEventType
+  from_firm_id   BigInt?
+  to_firm_id     BigInt?
+  from_firm_name String?                    @db.Text
+  to_firm_name   String?                    @db.Text
+  notes          String?                    @db.Text
+  performed_by   String?                    @db.Text
+  created_at     DateTime                   @default(now()) @db.Timestamptz()
+
+  assignment     ProjectAssignment          @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+
+  @@index([assignment_id])
+  @@index([employee_id])
+  @@map("project_assignment_events")
+}
+
+model Employee {
+  id                         BigInt              @id @default(autoincrement())
+  employee_id                String              @unique @default(cuid())
+  emp_code                   String?             @unique
+  name                       String              @db.Text
+  phone                      String?             @db.Text
+  email                      String?             @db.Text
+  designation                String?             @db.Text
+  status                     String              @default("active")
+
+  // Scoping & Relationships
+  department_id              BigInt?
+  home_firm_id               BigInt?
+  user_id                    BigInt?             @unique
+
+  // Work & Dates (all timestamptz)
+  joining_date               DateTime?           @db.Timestamptz()
+  last_working_day           DateTime?           @db.Timestamptz()
+  termination_date           DateTime?           @db.Timestamptz()
+  separation_type            String?             @db.Text
+  leaving_reason             String?             @db.Text
+  manager_name               String?             @db.Text
+  work_location              String?             @db.Text
+  employment_type            String?             @db.Text
+  joining_place              String?             @db.Text
+  attendance_mode            String?             @db.Text
+  probation_months           Int?
+
+  // Financial & Compensation
+  offered_ctc                String?             @db.Text
+  monthly_salary             Decimal?            @db.Decimal(12, 2)
+  bank_account               String?             @db.Text
+  ifsc_code                  String?             @db.Text
+  bank_branch_name           String?             @db.Text
+  payment_mode               String?             @db.Text
+  pf_eligible                Boolean?            @default(false)
+  esic_eligible              Boolean?            @default(false)
+  past_pf_no                 String?             @db.Text
+  esic_no                    String?             @db.Text
+
+  // Personal Details & Identification
+  blood_group                String?             @db.Text
+  father_name                String?             @db.Text
+  highest_qualification      String?             @db.Text
+  current_address            String?             @db.Text
+  aadhar_address             String?             @db.Text
+  aadhar_no                  String?             @db.Text
+
+  // Emergency Contact
+  emergency_contact_name     String?             @db.Text
+  emergency_contact_phone    String?             @db.Text
+  emergency_contact_relation String?             @db.Text
+
+  // Asset Issuance Flags
+  email_to_be_issued         Boolean?            @default(false)
+  mobile_to_be_issued        Boolean?            @default(false)
+  laptop_to_be_issued        Boolean?            @default(false)
+
+  // Candidate link & Onboarding / Separation Flags
+  candidate_id               BigInt?             @unique
+  salary_on_hold             Boolean?            @default(false)
+  salary_hold_reason         String?             @db.Text
+  offer_letter_issued        Boolean?            @default(false)
+  id_card_issued             Boolean?            @default(false)
+  induction_done             Boolean?            @default(false)
+  onboarding_checklist       Json?
+  exit_checklist             Json?
+  custom_checklist_items     Json?
+
+  // Timestamps
+  created_at                 DateTime            @default(now()) @db.Timestamptz()
+  updated_at                 DateTime            @default(now()) @updatedAt @db.Timestamptz()
+
+  // Relations
+  user                       User?               @relation(fields: [user_id], references: [id])
+  department                 Department?         @relation(fields: [department_id], references: [id])
+  home_firm                  Firm?               @relation("EmployeeHomeFirm", fields: [home_firm_id], references: [id])
+  project_assignments        ProjectAssignment[]
+  candidate                  HrCandidate?        @relation(fields: [candidate_id], references: [id])
+  joining                    HrJoining?
+  attendances                HrAttendance[]
+  attendance_claims          HrAttendanceClaim[]
+  attendance_punches         HrAttendancePunch[]
+  leaves                     HrLeave[]
+  gate_passes                HrGatePass[]
+  advance_requests           HrAdvanceRequest[]
+  loans                      HrEmployeeLoan[]
+  salary_structure           HrSalaryStructure?
+  payslips                   HrPayslip[]
+
+  @@index([status])
+  @@index([home_firm_id])
+  @@index([department_id])
+  @@index([phone])
+  @@map("employee")
+}
+
+model HrCandidate {
+  id                   BigInt       @id @default(autoincrement())
+  candidate_enquiry_no String       @unique
+  candidate_name       String       @db.Text
+  dob                  DateTime?    @db.Timestamptz()
+  phone_no             String       @db.Text
+  email                String?      @db.Text
+  previous_company     String?      @db.Text
+  experience           String?      @db.Text
+  previous_position    String?      @db.Text
+  marital_status       String?      @db.Text
+  aadhar_no            String?      @db.Text
+  last_salary          String?      @db.Text
+  reason_for_leaving   String?      @db.Text
+  current_address      String?      @db.Text
+  photo                String?      @db.Text
+  resume               String?      @db.Text
+  status               String       @default("pending")
+  indent_id            String?      @db.Text
+  notes                String?      @db.Text
+  next_call_date       DateTime?    @db.Timestamptz()
+  follow_up_notes      String?      @db.Text
+  call_logs            Json?        @default("[]")
+  documents            Json?        @default("{}")
+  created_at           DateTime     @default(now()) @db.Timestamptz()
+  updated_at           DateTime     @default(now()) @updatedAt @db.Timestamptz()
+  joining              HrJoining?
+  employee             Employee?
+
+  @@index([status])
+  @@index([phone_no])
+  @@index([candidate_enquiry_no])
+  @@map("hr_candidate")
+}
+
+model HrJoining {
+  id                         BigInt       @id @default(autoincrement())
+  candidate_id               BigInt?      @unique
+  employee_id                String?      @unique
+  joining_date               DateTime     @db.Timestamptz()
+  status                     String       @default("pending")
+  father_name                String?      @db.Text
+  highest_qualification      String?      @db.Text
+  current_address            String?      @db.Text
+  aadhar_address             String?      @db.Text
+  aadhar_no                  String?      @db.Text
+  employment_type            String?      @db.Text
+  designation_offered        String?      @db.Text
+  company_name               String?      @db.Text
+  joining_place              String?      @db.Text
+  attendance_mode            String?      @db.Text
+  offered_ctc                String?      @db.Text
+  monthly_salary             Decimal?     @db.Decimal(12, 2)
+  probation_months           Int?         @default(3)
+  reporting_manager          String?      @db.Text
+  work_location              String?      @db.Text
+  bank_account               String?      @db.Text
+  bank_branch_name           String?      @db.Text
+  ifsc_code                  String?      @db.Text
+  payment_mode               String?      @db.Text
+  emergency_contact_name     String?      @db.Text
+  emergency_contact_phone    String?      @db.Text
+  emergency_contact_relation String?      @db.Text
+  email_to_be_issued         Boolean?     @default(false)
+  mobile_to_be_issued        Boolean?     @default(false)
+  laptop_to_be_issued        Boolean?     @default(false)
+  pf_eligible                Boolean?     @default(false)
+  esic_eligible              Boolean?     @default(false)
+  past_pf_no                 String?      @db.Text
+  esic_no                    String?      @db.Text
+  documents                  Json?        @default("{}")
+  created_at                 DateTime     @default(now()) @db.Timestamptz()
+  updated_at                 DateTime     @default(now()) @updatedAt @db.Timestamptz()
+
+  candidate                  HrCandidate? @relation(fields: [candidate_id], references: [id])
+  employee                   Employee?    @relation(fields: [employee_id], references: [employee_id])
+
+  @@map("hr_joining")
+}
+
+model HrAttendance {
+  id            BigInt    @id @default(autoincrement())
+  employee_id   String    @db.Text
+  date          String    @db.Text // YYYY-MM-DD
+  shift_id      String?   @db.Text
+  check_in      String?   @db.Text // HH:MM
+  check_out     String?   @db.Text // HH:MM
+  status        String    @default("present")
+  working_hours Decimal   @default(0) @db.Decimal(5, 2)
+  overtime      Decimal   @default(0) @db.Decimal(5, 2)
+  notes         String?   @db.Text
+  created_at    DateTime  @default(now()) @db.Timestamptz()
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee      Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@unique([employee_id, date])
+  @@index([employee_id])
+  @@index([date])
+  @@map("hr_attendance")
+}
+
+// One row per attendance photo submitted by an incharge on an employee's
+// behalf (see AttendanceController.submitPunch) — kept as a permanent,
+// append-only log distinct from HrAttendance's one-row-per-day summary so
+// an 'in' punch's photo/location is never overwritten by a later 'out'.
+model HrAttendancePunch {
+  id           String   @id @default(cuid())
+  employee_id  String   @db.Text
+  date         String   @db.Text // YYYY-MM-DD
+  punch_type   String   @db.Text // in | out | half_day | full_day
+  punch_time   String   @db.Text // HH:MM
+  photo_url    String   @db.Text
+  latitude     Decimal  @db.Decimal(9, 6)
+  longitude    Decimal  @db.Decimal(9, 6)
+  submitted_by String?  @db.Text // name/id of the incharge who submitted this
+  notes        String?  @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  employee     Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([date])
+  @@map("hr_attendance_punch")
+}
+
+model HrAttendanceClaim {
+  id             BigInt    @id @default(autoincrement())
+  employee_id    String    @db.Text
+  date           String    @db.Text // YYYY-MM-DD
+  claim_type     String    @db.Text // PUNCH_MIS, OVERTIME, WEEKEND_PRESENT
+  check_in       String?   @db.Text
+  check_out      String?   @db.Text
+  overtime_hours Decimal?  @db.Decimal(5, 2)
+  reason         String    @db.Text
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewed_by    String?   @db.Text
+  review_note    String?   @db.Text
+  reviewed_at    DateTime? @db.Timestamptz()
+  created_at     DateTime  @default(now()) @db.Timestamptz()
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee       Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@index([date])
+  @@map("hr_attendance_claim")
+}
+
+model HrAttendanceConfig {
+  id                 BigInt   @id @default(autoincrement())
+  full_day_hours     Decimal  @default(9) @db.Decimal(5, 2)
+  half_day_min_hours Decimal  @default(4) @db.Decimal(5, 2)
+  late_grace_minutes Int      @default(15)
+  created_at         DateTime @default(now()) @db.Timestamptz()
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("hr_attendance_config")
+}
+
+model HrLeave {
+  id                   BigInt    @id @default(autoincrement())
+  employee_id          String    @db.Text
+  employee_name        String    @db.Text
+  department_id        BigInt?
+  hod_id               String?   @db.Text
+  hod_name             String?   @db.Text
+  substitute           String?   @db.Text
+  leave_type           String?   @db.Text
+  from_date            DateTime  @db.Timestamptz()
+  to_date              DateTime  @db.Timestamptz()
+  days                 Decimal?  @db.Decimal(4, 1)
+  leave_days           Json?
+  reason               String    @db.Text
+  status               String    @default("pending") // pending, approved, rejected
+  submitted_by         String?   @db.Text
+  approved_by          String?   @db.Text
+  approved_date        DateTime? @db.Timestamptz()
+  remarks              String?   @db.Text
+  task_transfer_status String?   @db.Text
+  created_at           DateTime  @default(now()) @db.Timestamptz()
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee             Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@index([from_date, to_date])
+  @@map("hr_leave")
+}
+
+model HrGatePass {
+  id               BigInt    @id @default(autoincrement())
+  employee_id      String    @db.Text
+  employee_name    String?   @db.Text
+  emp_code         String?   @db.Text
+  department_name  String?   @db.Text
+  type             String    @default("Official") @db.Text // Official, Personal
+  place_to_visit   String    @db.Text
+  reason           String    @db.Text
+  departure_time   DateTime  @db.Timestamptz()
+  expected_arrival DateTime  @db.Timestamptz()
+  out_time         String?   @db.Text
+  in_time          String?   @db.Text
+  status           String    @default("open") @db.Text // open, out, closed, rejected, pending
+  approved_by      String?   @db.Text
+  whatsapp_no      String?   @db.Text
+  attachment       String?   @db.Text
+  security_logs    Json?     @default("[]")
+  created_at       DateTime  @default(now()) @db.Timestamptz()
+  updated_at       DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee         Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@map("hr_gate_pass")
+}
+
+model HrAdvanceRequest {
+  id                         BigInt    @id @default(autoincrement())
+  employee_id                String    @db.Text
+  employee_name              String    @db.Text
+  emp_code                   String?   @db.Text
+  department_name            String?   @db.Text
+  request_amount             Decimal   @db.Decimal(12, 2)
+  monthly_deduction          Decimal   @db.Decimal(12, 2)
+  no_of_months               Int
+  reason                     String    @db.Text
+  status                     String    @default("pending") // pending, approved, rejected, completed
+  remarks                    String?   @db.Text
+  approved_amount            Decimal?  @db.Decimal(12, 2)
+  approved_monthly_deduction Decimal?  @db.Decimal(12, 2)
+  approved_no_of_months      Int?
+  request_date               DateTime  @default(now()) @db.Timestamptz()
+  approved_date              DateTime? @db.Timestamptz()
+  start_deduction_month      String?   @db.Text // YYYY-MM
+  loan_id                    String?   @db.Text
+  created_at                 DateTime  @default(now()) @db.Timestamptz()
+  updated_at                 DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee                   Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@map("hr_advance_request")
+}
+
+model HrEmployeeLoan {
+  id                  String    @id @default(cuid())
+  employee_id         String    @db.Text
+  amount              Decimal   @db.Decimal(12, 2)
+  emi_amount          Decimal   @db.Decimal(12, 2)
+  outstanding_balance Decimal   @db.Decimal(12, 2)
+  purpose             String?   @db.Text
+  start_date          DateTime  @default(now()) @db.Timestamptz()
+  status              String    @default("active") // active, settled
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee            Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@map("hr_employee_loan")
+}
+
+model HrSalaryStructure {
+  id                        BigInt   @id @default(autoincrement())
+  employee_id               String   @unique @db.Text
+  basic_percent             Decimal  @default(40) @db.Decimal(5, 2)
+  hra_percent               Decimal  @default(20) @db.Decimal(5, 2)
+  conveyance_percent        Decimal  @default(10) @db.Decimal(5, 2)
+  medical_percent           Decimal  @default(5) @db.Decimal(5, 2)
+  special_allowance_percent Decimal  @default(25) @db.Decimal(5, 2)
+  deductions                Json?    @default("[]")
+  created_at                DateTime @default(now()) @db.Timestamptz()
+  updated_at                DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  employee                  Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@map("hr_salary_structure")
+}
+
+model HrPayslip {
+  id                  BigInt    @id @default(autoincrement())
+  employee_id         String    @db.Text
+  month               Int
+  year                Int
+  total_working_days  Decimal   @default(30) @db.Decimal(5, 2)
+  present_days        Decimal   @default(0) @db.Decimal(5, 2)
+  leave_days          Decimal   @default(0) @db.Decimal(5, 2)
+  overtime_hours      Decimal   @default(0) @db.Decimal(5, 2)
+  overtime_pay        Decimal   @default(0) @db.Decimal(12, 2)
+  gross_salary        Decimal   @default(0) @db.Decimal(12, 2)
+  total_deductions    Decimal   @default(0) @db.Decimal(12, 2)
+  loan_deduction      Decimal   @default(0) @db.Decimal(12, 2)
+  net_salary          Decimal   @default(0) @db.Decimal(12, 2)
+  status              String    @default("pending") // pending, paid
+  paid_date           DateTime? @db.Timestamptz()
+
+  // Salary structure breakdown (earned amounts, prorated by attendance)
+  structure_id        BigInt?
+  monthly_ctc         Decimal   @default(0) @db.Decimal(12, 2)
+  calculation_days    Decimal   @default(0) @db.Decimal(5, 2)
+  basic               Decimal   @default(0) @db.Decimal(12, 2)
+  hra                 Decimal   @default(0) @db.Decimal(12, 2)
+  conveyance          Decimal   @default(0) @db.Decimal(12, 2)
+  medical_allowance   Decimal   @default(0) @db.Decimal(12, 2)
+  special_allowance   Decimal   @default(0) @db.Decimal(12, 2)
+  other_allowances    Decimal   @default(0) @db.Decimal(12, 2)
+  additional_salary   Decimal   @default(0) @db.Decimal(12, 2)
+  employer_pf         Decimal   @default(0) @db.Decimal(12, 2)
+  employer_esic       Decimal   @default(0) @db.Decimal(12, 2)
+  deduction_breakdown Json?     @default("[]")
+
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee            Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@unique([employee_id, month, year])
+  @@index([employee_id])
+  @@index([month, year])
+  @@map("hr_payslip")
+}
+
+model HrPayPolicy {
+  id                          BigInt   @id @default(autoincrement())
+  ot_enabled                  Boolean  @default(true)
+  ot_mode                     String   @default("PAY") // PAY, COMP_OFF
+  standard_shift_hours        Decimal  @default(8) @db.Decimal(5, 2)
+  overtime_rate_multiplier    Decimal  @default(1.5) @db.Decimal(5, 2)
+  weekend_ot_multiplier       Decimal  @default(1.5) @db.Decimal(5, 2)
+  holiday_ot_multiplier       Decimal  @default(2.0) @db.Decimal(5, 2)
+  weekend_work_multiplier     Decimal  @default(1.5) @db.Decimal(5, 2)
+  holiday_work_multiplier     Decimal  @default(2.0) @db.Decimal(5, 2)
+  late_grace_minutes          Int      @default(15)
+  late_deduct_type            String   @default("NONE") // PER_MINUTE, HALF_DAY, NONE
+  half_day_after_late_minutes Int      @default(120)
+  punch_mis_treatment         String   @default("HALF_DAY") // ABSENT, HALF_DAY, PRESENT
+  pf_enabled                  Boolean  @default(true)
+  pf_employee_rate            Decimal  @default(12) @db.Decimal(5, 2)
+  pf_employer_rate            Decimal  @default(12) @db.Decimal(5, 2)
+  esi_enabled                 Boolean  @default(true)
+  esi_employee_rate           Decimal  @default(0.75) @db.Decimal(5, 2)
+  esi_employer_rate           Decimal  @default(3.25) @db.Decimal(5, 2)
+  esi_gross_limit             Decimal  @default(21000) @db.Decimal(12, 2)
+  professional_tax_enabled    Boolean  @default(false)
+  created_at                  DateTime @default(now()) @db.Timestamptz()
+  updated_at                  DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("hr_pay_policy")
+}
+
+model HrLetterTemplate {
+  id           BigInt               @id @default(autoincrement())
+  name         String               @db.Text
+  letter_type  String               @db.Text // OFFER, EXPERIENCE, JOINING
+  content      String               @db.Text
+  is_default   Boolean              @default(false)
+  is_active    Boolean              @default(true)
+  fields       Json?                @default("[]")
+  created_at   DateTime             @default(now()) @db.Timestamptz()
+  updated_at   DateTime             @default(now()) @updatedAt @db.Timestamptz()
+  field_values HrLetterFieldValue[]
+
+  @@index([letter_type])
+  @@map("hr_letter_template")
+}
+
+model HrLetterFieldValue {
+  id          BigInt           @id @default(autoincrement())
+  template_id BigInt
+  field_key   String           @db.Text
+  value       String           @db.Text
+  employee_id String           @default("") @db.Text // "" = global, or specific employee_id
+  created_at  DateTime         @default(now()) @db.Timestamptz()
+  updated_at  DateTime         @default(now()) @updatedAt @db.Timestamptz()
+
+  template    HrLetterTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@unique([template_id, field_key, employee_id])
+  @@index([template_id])
+  @@map("hr_letter_field_value")
+}
+
+model HrAuditEvent {
+  id           BigInt   @id @default(autoincrement())
+  entity_type  String   @db.Text // candidate, joining, attendance, leave, gatepass, advance, separation
+  entity_id    String   @db.Text
+  event_type   String   @db.Text
+  performed_by String?  @db.Text
+  notes        String?  @db.Text
+  metadata     Json?
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([entity_type, entity_id])
+  @@index([event_type])
+  @@map("hr_audit_event")
+}
+
+model HrConfig {
+  key        String   @id @db.Text
+  value      Json
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("hr_config")
+}
+
+model HrSocialAccount {
+  id                BigInt    @id @default(autoincrement())
+  platform          String    @unique @db.Text // LinkedIn, Facebook, Twitter, Instagram, YouTube
+  handle            String    @db.Text
+  profile_url       String?   @db.Text
+  status            String    @default("connected") // connected, disconnected
+  auto_publish_jobs Boolean   @default(true)
+  track_referrals   Boolean   @default(true)
+
+  // Denormalized current stats, kept in sync by the /sync endpoint
+  followers_num     Int       @default(0)
+  growth_percent    Decimal   @default(0) @db.Decimal(6, 2)
+  impressions_30d   Int       @default(0)
+  engagement_rate   Decimal   @default(0) @db.Decimal(5, 2)
+  job_clicks_30d    Int       @default(0)
+  applicants_30d    Int       @default(0)
+  last_synced_at    DateTime? @db.Timestamptz()
+
+  connected_at      DateTime  @default(now()) @db.Timestamptz()
+  created_at        DateTime  @default(now()) @db.Timestamptz()
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  posts             HrSocialPost[]
+  snapshots         HrSocialAnalyticsSnapshot[]
+
+  @@index([status])
+  @@map("hr_social_account")
+}
+
+model HrSocialPost {
+  id           BigInt    @id @default(autoincrement())
+  account_id   BigInt
+  title        String    @db.Text
+  type         String    @default("announcement") // job, announcement
+  indent_id    String?   @db.Text // loose reference — indents live in hr_indents.json, not Postgres
+  published_at DateTime  @db.Timestamptz()
+  views        Int       @default(0)
+  clicks       Int       @default(0)
+  applies      Int?
+  likes        Int       @default(0)
+  created_at   DateTime  @default(now()) @db.Timestamptz()
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  account      HrSocialAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("hr_social_post")
+}
+
+model HrSocialAnalyticsSnapshot {
+  id              BigInt   @id @default(autoincrement())
+  account_id      BigInt
+  followers_num   Int
+  impressions_30d Int
+  engagement_rate Decimal  @db.Decimal(5, 2)
+  job_clicks_30d  Int
+  applicants_30d  Int
+  growth_percent  Decimal  @db.Decimal(6, 2) // vs previous snapshot, computed at insert time
+  recorded_at     DateTime @default(now()) @db.Timestamptz()
+  recorded_by     String?  @db.Text
+
+  account         HrSocialAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("hr_social_analytics_snapshot")
+}
+
 

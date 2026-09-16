@@ -27,6 +27,14 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
     });
   } else {
     // For development / backwards compatibility during initial migration, allow optional auth context fallback
+    if (config.env !== 'production') {
+      req.user = {
+        id: '1',
+        email: 'admin@example.com',
+        role: 'SUPER_ADMIN',
+        permittedFirms: [],
+      };
+    }
     next();
   }
 };

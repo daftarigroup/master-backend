@@ -49,6 +49,26 @@ export const TABLE_TTL_CONFIG: Record<string, { ttl: number; isPublic: boolean }
   payment_history: { ttl: 30_000, isPublic: false },
   inventory: { ttl: 30_000, isPublic: false },
   pc_report: { ttl: 30_000, isPublic: false },
+  project_assignments: { ttl: 30_000, isPublic: false },
+  project_assignment_events: { ttl: 60_000, isPublic: false },
+  employee: { ttl: 60_000, isPublic: false },
+
+  // HR System Tables
+  hr_candidate: { ttl: 30_000, isPublic: false },
+  hr_joining: { ttl: 60_000, isPublic: false },
+  hr_attendance: { ttl: 30_000, isPublic: false },
+  hr_attendance_claim: { ttl: 30_000, isPublic: false },
+  hr_attendance_config: { ttl: 300_000, isPublic: false },
+  hr_leave: { ttl: 30_000, isPublic: false },
+  hr_gate_pass: { ttl: 30_000, isPublic: false },
+  hr_advance_request: { ttl: 30_000, isPublic: false },
+  hr_employee_loan: { ttl: 60_000, isPublic: false },
+  hr_salary_structure: { ttl: 120_000, isPublic: false },
+  hr_payslip: { ttl: 30_000, isPublic: false },
+  hr_letter_template: { ttl: 120_000, isPublic: false },
+  hr_letter_field_value: { ttl: 120_000, isPublic: false },
+  hr_audit_event: { ttl: 60_000, isPublic: false },
+  hr_config: { ttl: 300_000, isPublic: false },
 };
 
 const DEFAULT_TABLE_TTL = { ttl: 30_000, isPublic: false };
@@ -67,6 +87,23 @@ const TABLE_INVALIDATION_DEPENDENCIES: Record<string, string[]> = {
   issue: ['issue', 'inventory', 'pc_report'],
   tally_entry: ['tally_entry', 'pc_report'],
   holiday: ['holiday', 'working_day_calendar'],
+  project_assignments: ['project_assignments', 'project_assignment_events'],
+  project_assignment_events: ['project_assignment_events'],
+  employee: ['employee', 'project_assignments', 'hr_joining', 'hr_leave', 'hr_attendance', 'hr_payslip'],
+  hr_candidate: ['hr_candidate', 'hr_joining', 'employee'],
+  hr_joining: ['hr_joining', 'hr_candidate', 'employee'],
+  hr_attendance: ['hr_attendance', 'hr_payslip'],
+  hr_attendance_claim: ['hr_attendance_claim', 'hr_attendance'],
+  hr_leave: ['hr_leave', 'hr_attendance'],
+  hr_gate_pass: ['hr_gate_pass'],
+  hr_advance_request: ['hr_advance_request', 'hr_employee_loan', 'hr_payslip'],
+  hr_employee_loan: ['hr_employee_loan', 'hr_advance_request', 'hr_payslip', 'employee'],
+  hr_salary_structure: ['hr_salary_structure', 'hr_payslip'],
+  hr_payslip: ['hr_payslip'],
+  hr_letter_template: ['hr_letter_template', 'hr_letter_field_value'],
+  hr_letter_field_value: ['hr_letter_field_value', 'hr_letter_template'],
+  hr_audit_event: ['hr_audit_event'],
+  hr_config: ['hr_config'],
   group_head: ['group_head', 'item', 'inventory'],
   uom: ['uom', 'item', 'inventory'],
   area_of_use: ['area_of_use', 'indent'],
@@ -990,8 +1027,18 @@ export class GenericController {
 
     const numericId = isNaN(Number(id)) ? id : BigInt(id);
 
+    const inventoryService = new InventoryStockService();
+
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const model = getPrismaModel(table, tx);
+
+      // Save record BEFORE delete so we can use product_name in post-delete hooks
+      let recordBeforeDelete: any = null;
+      if (table === 'issue' || table === 'indent' || table === 'store_in') {
+        try {
+          recordBeforeDelete = await model.findUnique({ where: { id: numericId } });
+        } catch (_) {}
+      }
 
       if (table === 'holiday') {
         const existing = await model.findUnique({ where: { id: numericId } });
@@ -1016,6 +1063,14 @@ export class GenericController {
       await model.delete({
         where: { id: numericId },
       });
+
+      // Post-Delete Inventory Sync Hook — mirrors the create/update hooks above
+      if (
+        (table === 'issue' || table === 'indent' || table === 'store_in') &&
+        recordBeforeDelete?.product_name
+      ) {
+        await inventoryService.syncInventoryItemAggregations(recordBeforeDelete.product_name, tx);
+      }
     });
 
     // Invalidate cached query results for the mutated table and dependencies
