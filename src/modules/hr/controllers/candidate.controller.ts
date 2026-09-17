@@ -3,13 +3,31 @@ import { prisma } from '../../../database/prisma';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ApiError } from '../../../utils/ApiError';
 import { HrAuditService } from '../services/hrAudit.service';
+import { loadIndents } from './indent.controller';
 
 export class CandidateController {
   private formatCandidate(c: any) {
+    let matchedIndent: any = null;
+    try {
+      if (c.indent_id) {
+        const indents = loadIndents();
+        matchedIndent = indents.find((i: any) => String(i.id) === String(c.indent_id)) || null;
+      }
+    } catch (_err) {}
+
+    const vacancyTitle =
+      matchedIndent?.title ||
+      c.joining?.designation_offered ||
+      c.employee?.designation ||
+      c.previous_position ||
+      null;
+
     return {
       ...c,
       id: c.id.toString(),
       indentId: c.indent_id || null,
+      indent: matchedIndent,
+      vacancyTitle,
       candidateEnquiryNo: c.candidate_enquiry_no,
       candidateName: c.candidate_name,
       dob: c.dob ? c.dob.toISOString().slice(0, 10) : null,

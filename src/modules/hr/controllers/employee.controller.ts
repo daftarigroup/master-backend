@@ -22,6 +22,7 @@ export class EmployeeController {
       joiningDate: e.joining_date?.toISOString() || null,
       lastWorkingDay: e.last_working_day?.toISOString() || null,
       terminationDate: e.termination_date?.toISOString() || null,
+      monthlySalary: e.monthly_salary != null ? Number(e.monthly_salary) : null,
       createdAt: e.created_at?.toISOString(),
       updatedAt: e.updated_at?.toISOString(),
       activeAssignment: e.project_assignments && e.project_assignments.length > 0

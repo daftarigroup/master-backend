@@ -28,7 +28,7 @@ export interface HrIndentRecord {
 
 const DATA_FILE = path.join(__dirname, '../data/hr_indents.json');
 
-function loadIndents(): HrIndentRecord[] {
+export function loadIndents(): HrIndentRecord[] {
   try {
     if (!fs.existsSync(DATA_FILE)) {
       const dir = path.dirname(DATA_FILE);
