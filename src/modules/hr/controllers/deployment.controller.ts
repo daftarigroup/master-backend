@@ -250,7 +250,20 @@ export class DeploymentController {
 
     const events = await prisma.projectAssignmentEvent.findMany({
       where,
-      orderBy: { created_at: 'asc' },
+      orderBy: { created_at: 'desc' },
+      include: {
+        assignment: {
+          include: {
+            employee: {
+              select: {
+                name: true,
+                emp_code: true,
+                employee_id: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const formatted = events.map((e) => ({
@@ -258,6 +271,8 @@ export class DeploymentController {
       id: e.id.toString(),
       assignmentId: e.assignment_id.toString(),
       employeeId: e.employee_id,
+      employeeName: (e as any).assignment?.employee?.name || null,
+      empCode: (e as any).assignment?.employee?.emp_code || null,
       eventType: e.event_type,
       fromProjectId: e.from_firm_id ? Number(e.from_firm_id) : null,
       toProjectId: e.to_firm_id ? Number(e.to_firm_id) : null,
