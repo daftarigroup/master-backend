@@ -207,8 +207,8 @@ export class LetterController {
     let employee: any = null;
     if (employeeId) {
       const empWhere: any = /^\d+$/.test(employeeId)
-        ? { OR: [{ id: BigInt(employeeId) }, { employee_id: employeeId }] }
-        : { employee_id: employeeId };
+        ? { OR: [{ id: BigInt(employeeId) }, { employee_id: employeeId }, { emp_code: employeeId }] }
+        : { OR: [{ employee_id: employeeId }, { emp_code: employeeId }] };
       employee = await prisma.employee.findFirst({
         where: empWhere,
         include: { department: true },
@@ -222,37 +222,262 @@ export class LetterController {
       },
     });
 
-    const tokens: Record<string, string> = {
-      todayDate: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
-      companyName: 'Master Construction Co.',
-      name: employee?.name || 'Candidate / Employee',
-      employeeName: employee?.name || 'Candidate / Employee',
-      candidateName: employee?.name || 'Candidate / Employee',
-      empCode: employee?.emp_code || employee?.employee_id || 'EMP000',
-      designation: employee?.designation || 'Staff',
-      department: employee?.department?.name || 'Operations',
-      joiningDate: employee?.joining_date
-        ? employee.joining_date.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-        : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
-      lastWorkingDay: employee?.last_working_day
-        ? employee.last_working_day.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-        : 'N/A',
-      workLocation: employee?.work_location || 'Head Office',
-      managerName: employee?.manager_name || 'Management',
-      offeredCTC: employee?.offered_ctc || 'As discussed',
-      monthlySalary: employee?.monthly_salary ? `₹${Number(employee.monthly_salary).toLocaleString('en-IN')}` : 'As discussed',
+    const fieldsDef: any[] = Array.isArray(template.fields) ? (template.fields as any[]) : [];
+
+    const formatDate = (d: Date | string | null | undefined) => {
+      if (!d) return '';
+      const parsed = new Date(d);
+      if (isNaN(parsed.getTime())) return String(d);
+      return parsed.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
     };
+
+    const formatCurrency = (amount: any) => {
+      if (amount === null || amount === undefined || amount === '') return '';
+      const num = Number(amount);
+      if (isNaN(num)) return String(amount);
+      return num.toLocaleString('en-IN');
+    };
+
+    const botivateOrCompanyField = fieldsDef.find(
+      (f) =>
+        f.key === 'botivate' ||
+        f.autoMap === 'companyName' ||
+        f.label?.toLowerCase().includes('botivate')
+    );
+    const defaultCompanyName = botivateOrCompanyField?.label || 'Botivate Services LLP';
+
+    const todayFormatted = formatDate(new Date());
+    const empName = employee?.name || 'Candidate / Employee';
+    const empDesignation = employee?.designation || 'Staff';
+    const empDept = employee?.department?.name || 'Operations';
+    const empJoiningDate = employee?.joining_date ? formatDate(employee.joining_date) : todayFormatted;
+    const empSalaryRaw = employee?.monthly_salary || '';
+    const empSalaryFormatted = formatCurrency(empSalaryRaw) || 'As discussed';
+    const empCtcRaw = employee?.offered_ctc || '';
+    const empCtcFormatted = formatCurrency(empCtcRaw) || empSalaryFormatted;
+    const empLocation = employee?.work_location || employee?.joining_place || 'Head Office';
+    const empManager = employee?.manager_name || 'Management';
+    const empCode = employee?.emp_code || employee?.employee_id || 'EMP000';
+
+    const baseTokens: Record<string, string> = {
+      // Date
+      todayDate: todayFormatted,
+      today_date: todayFormatted,
+      offerDate: todayFormatted,
+      offer_date: todayFormatted,
+      date: todayFormatted,
+      current_date: todayFormatted,
+      currentDate: todayFormatted,
+
+      // Company
+      companyName: defaultCompanyName,
+      company_name: defaultCompanyName,
+      company: defaultCompanyName,
+      botivate: defaultCompanyName,
+      organization: defaultCompanyName,
+      firm: defaultCompanyName,
+
+      // Employee Name
+      name: empName,
+      employeeName: empName,
+      employee_name: empName,
+      candidateName: empName,
+      candidate_name: empName,
+      emp_name: empName,
+      empName: empName,
+
+      // Code / ID
+      empCode: empCode,
+      emp_code: empCode,
+      employeeId: empCode,
+      employee_id: empCode,
+
+      // Designation / Position
+      designation: empDesignation,
+      position: empDesignation,
+      role: empDesignation,
+      designationOffered: empDesignation,
+      designation_offered: empDesignation,
+
+      // Department
+      department: empDept,
+      dept: empDept,
+      departmentName: empDept,
+      department_name: empDept,
+
+      // Joining Date
+      joiningDate: empJoiningDate,
+      joining_date: empJoiningDate,
+      doj: empJoiningDate,
+      date_of_joining: empJoiningDate,
+      dateOfJoining: empJoiningDate,
+      start_date: empJoiningDate,
+      startDate: empJoiningDate,
+
+      // Salary / CTC
+      salary: empSalaryFormatted,
+      monthlySalary: empSalaryFormatted,
+      monthly_salary: empSalaryFormatted,
+      grossSalary: empSalaryFormatted,
+      gross_salary: empSalaryFormatted,
+      salaryWithCurrency: `₹${empSalaryFormatted}`,
+      salary_with_currency: `₹${empSalaryFormatted}`,
+      offeredCTC: empCtcFormatted,
+      offered_ctc: empCtcFormatted,
+      ctc: empCtcFormatted,
+      annualCTC: empCtcFormatted,
+      annual_ctc: empCtcFormatted,
+
+      // Location
+      workLocation: empLocation,
+      work_location: empLocation,
+      location: empLocation,
+      joiningPlace: empLocation,
+      joining_place: empLocation,
+
+      // Manager / Reporting To
+      managerName: empManager,
+      manager_name: empManager,
+      reportingTo: empManager,
+      reporting_to: empManager,
+      reportingManager: empManager,
+      reporting_manager: empManager,
+      manager: empManager,
+
+      // Contact & Employment details
+      phone: employee?.phone || '',
+      mobile: employee?.phone || '',
+      email: employee?.email || '',
+      probationMonths: employee?.probation_months ? `${employee.probation_months} months` : '3 months',
+      probation_months: employee?.probation_months ? `${employee.probation_months} months` : '3 months',
+      employmentType: employee?.employment_type || 'Full-time',
+      employment_type: employee?.employment_type || 'Full-time',
+      currentAddress: employee?.current_address || '',
+      current_address: employee?.current_address || '',
+      address: employee?.current_address || '',
+      lastWorkingDay: employee?.last_working_day ? formatDate(employee.last_working_day) : 'N/A',
+      last_working_day: employee?.last_working_day ? formatDate(employee.last_working_day) : 'N/A',
+    };
+
+    // Process fields defined on the template
+    for (const field of fieldsDef) {
+      if (!field.key) continue;
+      if (field.autoMap) {
+        switch (field.autoMap) {
+          case 'name':
+            baseTokens[field.key] = empName;
+            break;
+          case 'designation':
+          case 'designationOffered':
+            baseTokens[field.key] = empDesignation;
+            break;
+          case 'employeeId':
+            baseTokens[field.key] = empCode;
+            break;
+          case 'joiningDate':
+            baseTokens[field.key] = empJoiningDate;
+            break;
+          case 'department':
+            baseTokens[field.key] = empDept;
+            break;
+          case 'phone':
+            baseTokens[field.key] = employee?.phone || '';
+            break;
+          case 'email':
+            baseTokens[field.key] = employee?.email || '';
+            break;
+          case 'offeredCTC':
+            baseTokens[field.key] = empCtcFormatted;
+            break;
+          case 'monthlySalary':
+            baseTokens[field.key] = empSalaryFormatted;
+            break;
+          case 'companyName':
+            baseTokens[field.key] = field.label || defaultCompanyName;
+            break;
+          case 'joiningPlace':
+            baseTokens[field.key] = empLocation;
+            break;
+          case 'reportingManager':
+            baseTokens[field.key] = empManager;
+            break;
+          case 'probationMonths':
+            baseTokens[field.key] = employee?.probation_months ? `${employee.probation_months} months` : '3 months';
+            break;
+          case 'employmentType':
+            baseTokens[field.key] = employee?.employment_type || 'Full-time';
+            break;
+        }
+      } else if (field.label && !baseTokens[field.key]) {
+        baseTokens[field.key] = field.label;
+      }
+    }
 
     // Override with custom field values
     for (const fv of fieldValues) {
-      tokens[fv.field_key] = fv.value;
+      if (fv.value !== undefined && fv.value !== null && fv.value !== '') {
+        baseTokens[fv.field_key] = fv.value;
+      }
+    }
+
+    const normalizeKey = (str: string) => str.toLowerCase().replace(/[\s_\-]+/g, '');
+
+    const normalizedMap = new Map<string, string>();
+    for (const [k, v] of Object.entries(baseTokens)) {
+      normalizedMap.set(k, v);
+      normalizedMap.set(k.toLowerCase(), v);
+      normalizedMap.set(normalizeKey(k), v);
     }
 
     let renderedHtml = template.content;
-    for (const [key, val] of Object.entries(tokens)) {
-      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'gi');
-      renderedHtml = renderedHtml.replace(regex, val);
-    }
+    renderedHtml = renderedHtml.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, rawKey) => {
+      const trimmed = rawKey.trim();
+      if (baseTokens[trimmed] !== undefined) {
+        return baseTokens[trimmed];
+      }
+      const lower = trimmed.toLowerCase();
+      if (normalizedMap.has(lower)) {
+        return normalizedMap.get(lower)!;
+      }
+      const norm = normalizeKey(trimmed);
+      if (normalizedMap.has(norm)) {
+        return normalizedMap.get(norm)!;
+      }
+      // Fuzzy fallbacks
+      if (norm.includes('employee') || norm.includes('candidate') || norm.includes('name')) {
+        return empName;
+      }
+      if (norm.includes('salary')) {
+        return empSalaryFormatted;
+      }
+      if (norm.includes('joining') && norm.includes('date')) {
+        return empJoiningDate;
+      }
+      if (norm.includes('offer') && norm.includes('date')) {
+        return todayFormatted;
+      }
+      if (norm.includes('work') || norm.includes('location')) {
+        return empLocation;
+      }
+      if (norm.includes('reporting') || norm.includes('manager')) {
+        return empManager;
+      }
+      if (norm.includes('company') || norm.includes('botivate')) {
+        return defaultCompanyName;
+      }
+      return match;
+    });
+
+    const resolvedEmployeeName =
+      employee?.name ||
+      baseTokens.employeeName ||
+      baseTokens.name ||
+      baseTokens.candidateName ||
+      'Candidate / Employee';
 
     res.json({
       success: true,
@@ -261,8 +486,10 @@ export class LetterController {
         templateName: template.name,
         letterType: template.letter_type,
         employeeId: employee?.employee_id || employeeId || '',
+        employeeName: resolvedEmployeeName,
+        html: renderedHtml,
         renderedHtml,
-        tokensReplaced: tokens,
+        tokensReplaced: baseTokens,
       },
     });
   });
