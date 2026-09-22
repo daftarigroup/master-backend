@@ -159,7 +159,7 @@ export class SalaryController {
       const empAtt = attendances.filter((a: any) => a.employee_id === emp.employee_id);
       const presentDays = empAtt.filter((a: any) => a.status === 'present').length;
       const leaveDays = empAtt.filter((a: any) => a.status === 'leave').length;
-      const halfDays = empAtt.filter((a: any) => a.status === 'half-day').length;
+      const halfDays = empAtt.filter((a: any) => a.status === 'half-day' || a.status === 'half_day').length;
       const absentDays = Math.max(0, daysInMonth - (presentDays + leaveDays + halfDays));
       const totalOtHours = empAtt.reduce((sum: number, a: any) => sum + Number(a.overtime || 0), 0);
 
@@ -513,7 +513,7 @@ export class SalaryController {
         const empAtt = attendances.filter((a: any) => a.employee_id === emp.employee_id);
         const presentDays = empAtt.filter((a: any) => a.status === 'present').length;
         const leaveDays = empAtt.filter((a: any) => a.status === 'leave').length;
-        const halfDays = empAtt.filter((a: any) => a.status === 'half-day').length;
+        const halfDays = empAtt.filter((a: any) => a.status === 'half-day' || a.status === 'half_day').length;
         const totalOtHours = empAtt.reduce((sum: number, a: any) => sum + Number(a.overtime || 0), 0);
 
         const { id: structureId, structure, deductions } = await this.resolveStructure(emp.employee_id);

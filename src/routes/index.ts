@@ -5,6 +5,10 @@ import checklistRoutes from '../modules/checklist/routes/checklist.routes';
 import pettyCashRoutes from '../modules/petty-cash/routes/pettyCash.routes';
 import documentRoutes from '../modules/document/routes/document.routes';
 import hrRoutes from '../modules/hr/routes/hr.routes';
+import assetRoutes from '../modules/asset/routes/asset.routes';
+import { assetController } from '../modules/asset/controllers/asset.controller';
+import maintenanceRoutes from '../modules/maintenance/routes/maintenance.routes';
+import repairRoutes from '../modules/repair/routes/repair.routes';
 import { authenticateJWT } from '../middleware/auth.middleware';
 import { getAwsConfigStatus } from '../config';
 import { prisma } from '../database/prisma';
@@ -21,6 +25,9 @@ router.get('/health', (_req, res) => {
   });
 });
 
+// Public Asset Verification (for mobile QR code scanning without authentication)
+router.get('/public/assets/:id', assetController.getById);
+
 router.use('/store', storeRoutes);
 router.use('/email', emailRoutes);
 router.use('/checklist', authenticateJWT, checklistRoutes);
@@ -29,6 +36,32 @@ router.use('/document', authenticateJWT, documentRoutes);
 router.use('/doc-submanager', authenticateJWT, documentRoutes);
 router.use('/hr', authenticateJWT, hrRoutes);
 router.use('/hrfms', authenticateJWT, hrRoutes);
+router.use('/assets', authenticateJWT, assetRoutes);
+router.use('/maintenance', authenticateJWT, maintenanceRoutes);
+router.use('/repair-system', authenticateJWT, repairRoutes);
+
+// Assignee picker shared by Maintenance's assign/transfer/breakdown-assignee UIs —
+// {id, name, email, role, employeeId}, matching AssignableUser in the frontend.
+router.get('/user/list', authenticateJWT, async (_req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, user_name: true, role: true, employee: { select: { employee_id: true } } },
+    });
+    res.json({
+      success: true,
+      data: users.map((u: any) => ({
+        id: String(u.id),
+        name: u.name || u.user_name || 'User',
+        email: '',
+        role: u.role || 'USER',
+        employeeId: u.employee?.employee_id ?? null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Shared maintenance departments for HR & system-wide dropdowns
 router.get(['/maintenance/departments', '/departments'], async (_req, res, next) => {
@@ -46,6 +79,35 @@ router.get(['/maintenance/departments', '/departments'], async (_req, res, next)
       })),
       pagination: {
         total: departments.length,
+        limit: 200,
+        page: 1,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Shared firms / projects for Asset, Maintenance & Repair systems
+router.get(['/maintenance/firms', '/firms', '/projects'], async (_req, res, next) => {
+  try {
+    const firms = await prisma.firm.findMany({
+      where: { active: true },
+      orderBy: { firm_name: 'asc' },
+    });
+    res.json({
+      status: 'success',
+      data: firms.map((f: any) => ({
+        id: f.id.toString(),
+        name: f.firm_name,
+        code: f.id.toString(),
+        billingAddress: f.billing_address || null,
+        destinationAddress: f.destination_address || null,
+        contactPerson: f.contact_person || null,
+        active: f.active,
+      })),
+      pagination: {
+        total: firms.length,
         limit: 200,
         page: 1,
       },
