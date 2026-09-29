@@ -6,6 +6,7 @@ import { workOrderRepository, WORK_ORDER_INCLUDE } from '../repositories/workOrd
 import { workOrderMapper } from './workOrder.mapper';
 import { parsePagination, paginationMeta } from './mapUtils';
 import { priorityFromNumber } from './priority';
+import { UserAuthContext } from '../../../utils/currentUser';
 
 type Tx = Prisma.TransactionClient;
 
@@ -66,37 +67,136 @@ function parseType(type: any): Prisma.MaintenanceWorkOrderWhereInput['type'] | u
   return { in: list };
 }
 
+function normalizeAuthContext(auth?: UserAuthContext | bigint | null): UserAuthContext | null {
+  if (!auth) return null;
+  if (typeof auth === 'bigint') {
+    return { userId: auth, role: 'USER', permittedFirms: [] };
+  }
+  return auth;
+}
+
+function buildWorkOrderScope(
+  query: Record<string, any>,
+  authCtx: UserAuthContext | null
+): Prisma.MaintenanceWorkOrderWhereInput[] {
+  if (!authCtx) return [];
+  const conditions: Prisma.MaintenanceWorkOrderWhereInput[] = [];
+
+  if (authCtx.role === 'SUPER_ADMIN') {
+    if (query.firmId || query.projectId) {
+      const fId = BigInt(query.firmId || query.projectId);
+      conditions.push({
+        OR: [{ firmId: fId }, { machine: { firmId: fId } }],
+      });
+    }
+    if (query.assigneeId) {
+      conditions.push({ currentAssigneeUserId: BigInt(query.assigneeId) });
+    }
+    if (query.view === 'personal' && authCtx.userId) {
+      conditions.push({ currentAssigneeUserId: authCtx.userId });
+    }
+    if (query.scope === 'outbox') {
+      conditions.push({ transfers: { some: { fromUserId: authCtx.userId ?? undefined } } });
+    }
+    if (query.scope === 'transfer') {
+      conditions.push({ transfers: { some: { toUserId: authCtx.userId ?? undefined } } });
+    }
+  } else if (authCtx.role === 'ADMIN') {
+    const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+    let allowedFirms = authCtx.permittedFirms;
+    if (requestedFirm !== null) {
+      allowedFirms = authCtx.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+    }
+    const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+    conditions.push({
+      OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
+    });
+
+    if (query.assigneeId) {
+      conditions.push({ currentAssigneeUserId: BigInt(query.assigneeId) });
+    }
+    if (query.view === 'personal' && authCtx.userId) {
+      conditions.push({ currentAssigneeUserId: authCtx.userId });
+    }
+    if (query.scope === 'outbox') {
+      conditions.push({ transfers: { some: { fromUserId: authCtx.userId ?? undefined } } });
+    }
+    if (query.scope === 'transfer') {
+      conditions.push({ transfers: { some: { toUserId: authCtx.userId ?? undefined } } });
+    }
+  } else {
+    // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
+    const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+    let allowedFirms = authCtx.permittedFirms;
+    if (requestedFirm !== null) {
+      allowedFirms = authCtx.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+    }
+    const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+    conditions.push({
+      OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
+    });
+
+    if (query.assigneeId) {
+      conditions.push({ currentAssigneeUserId: BigInt(query.assigneeId) });
+    }
+    if (query.view === 'personal' && authCtx.userId) {
+      conditions.push({ currentAssigneeUserId: authCtx.userId });
+    }
+    if (query.scope === 'outbox') {
+      conditions.push({ transfers: { some: { fromUserId: authCtx.userId ?? undefined } } });
+    }
+    if (query.scope === 'transfer') {
+      conditions.push({ transfers: { some: { toUserId: authCtx.userId ?? undefined } } });
+    }
+  }
+
+  return conditions;
+}
+
 export const workOrderService = {
-  async list(query: Record<string, any>, currentUserId: bigint | null) {
+  async list(query: Record<string, any>, auth?: UserAuthContext | bigint | null) {
+    const authCtx = normalizeAuthContext(auth);
     const { page, limit, skip } = parsePagination(query);
     const parsedStatus = parseStatus(query.status);
     const parsedType = parseType(query.type);
 
-    const where: Prisma.MaintenanceWorkOrderWhereInput = {
-      ...(parsedStatus ? { status: parsedStatus } : {}),
-      ...(query.machineId ? { machineId: query.machineId } : {}),
-      ...(parsedType ? { type: parsedType } : {}),
-      ...(query.assigneeId ? { currentAssigneeUserId: BigInt(query.assigneeId) } : {}),
-      ...(query.view === 'personal' && currentUserId ? { currentAssigneeUserId: currentUserId } : {}),
-      ...(query.from || query.to
-        ? { actualDueDate: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } }
-        : {}),
-      ...(query.repairOnly === 'true' || query.repairOnly === true ? { type: { in: ['REPAIR', 'BREAKDOWN'] } } : {}),
-      ...(query.excludeRepair === 'true' || query.excludeRepair === true ? { type: { notIn: ['REPAIR', 'BREAKDOWN'] } } : {}),
-      ...(query.overdue === 'true' || query.overdue === true
-        ? { actualDueDate: { lt: new Date() }, status: { notIn: ['COMPLETED', 'COMPLETED_LATE', 'CANCELLED', 'SKIPPED'] } }
-        : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { workOrderCode: { contains: query.search, mode: 'insensitive' } },
-              { machine: { name: { contains: query.search, mode: 'insensitive' } } },
-            ],
-          }
-        : {}),
-      ...(query.scope === 'outbox' ? { transfers: { some: { fromUserId: currentUserId ?? undefined } } } : {}),
-      ...(query.scope === 'transfer' ? { transfers: { some: { toUserId: currentUserId ?? undefined } } } : {}),
-    };
+    const andConditions: Prisma.MaintenanceWorkOrderWhereInput[] = [];
+
+    if (parsedStatus) andConditions.push({ status: parsedStatus });
+    if (query.machineId) andConditions.push({ machineId: query.machineId });
+    if (parsedType) andConditions.push({ type: parsedType });
+    if (query.from || query.to) {
+      andConditions.push({
+        actualDueDate: {
+          ...(query.from ? { gte: new Date(query.from) } : {}),
+          ...(query.to ? { lte: new Date(query.to) } : {}),
+        },
+      });
+    }
+    if (query.repairOnly === 'true' || query.repairOnly === true) {
+      andConditions.push({ type: { in: ['REPAIR', 'BREAKDOWN'] } });
+    }
+    if (query.excludeRepair === 'true' || query.excludeRepair === true) {
+      andConditions.push({ type: { notIn: ['REPAIR', 'BREAKDOWN'] } });
+    }
+    if (query.overdue === 'true' || query.overdue === true) {
+      andConditions.push({
+        actualDueDate: { lt: new Date() },
+        status: { notIn: ['COMPLETED', 'COMPLETED_LATE', 'CANCELLED', 'SKIPPED'] },
+      });
+    }
+    if (query.search) {
+      andConditions.push({
+        OR: [
+          { workOrderCode: { contains: query.search, mode: 'insensitive' } },
+          { machine: { name: { contains: query.search, mode: 'insensitive' } } },
+        ],
+      });
+    }
+
+    andConditions.push(...buildWorkOrderScope(query, authCtx));
+
+    const where: Prisma.MaintenanceWorkOrderWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [rows, total] = await Promise.all([workOrderRepository.findMany(where, skip, limit), workOrderRepository.count(where)]);
     return { status: 'success', data: rows.map(workOrderMapper.toDTO), pagination: paginationMeta(page, limit, total) };
@@ -108,28 +208,44 @@ export const workOrderService = {
     return workOrderMapper.toDTO(row);
   },
 
-  async stats(query: Record<string, any> = {}, currentUserId: bigint | null = null) {
-    const whereBase: Prisma.MaintenanceWorkOrderWhereInput = {
-      ...(query.machineId ? { machineId: query.machineId } : {}),
-      ...(query.assigneeId ? { currentAssigneeUserId: BigInt(query.assigneeId) } : {}),
-      ...(query.view === 'personal' && currentUserId ? { currentAssigneeUserId: currentUserId } : {}),
-      ...(query.repairOnly === 'true' || query.repairOnly === true ? { type: { in: ['REPAIR', 'BREAKDOWN'] } } : {}),
-      ...(query.excludeRepair === 'true' || query.excludeRepair === true ? { type: { notIn: ['REPAIR', 'BREAKDOWN'] } } : {}),
-      ...(query.frequency ? { plan: { frequency: query.frequency } } : {}),
-      ...(query.from || query.to
-        ? { actualDueDate: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } }
-        : {}),
-    };
+  async stats(query: Record<string, any> = {}, auth?: UserAuthContext | bigint | null) {
+    const authCtx = normalizeAuthContext(auth);
+    const andConditions: Prisma.MaintenanceWorkOrderWhereInput[] = [];
+
+    if (query.machineId) andConditions.push({ machineId: query.machineId });
+    if (query.repairOnly === 'true' || query.repairOnly === true) {
+      andConditions.push({ type: { in: ['REPAIR', 'BREAKDOWN'] } });
+    }
+    if (query.excludeRepair === 'true' || query.excludeRepair === true) {
+      andConditions.push({ type: { notIn: ['REPAIR', 'BREAKDOWN'] } });
+    }
+    if (query.frequency) andConditions.push({ plan: { frequency: query.frequency } });
+    if (query.from || query.to) {
+      andConditions.push({
+        actualDueDate: {
+          ...(query.from ? { gte: new Date(query.from) } : {}),
+          ...(query.to ? { lte: new Date(query.to) } : {}),
+        },
+      });
+    }
+
+    andConditions.push(...buildWorkOrderScope(query, authCtx));
+
+    const whereBase: Prisma.MaintenanceWorkOrderWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [total, pending, completed, overdue] = await Promise.all([
       prisma.maintenanceWorkOrder.count({ where: whereBase }),
-      prisma.maintenanceWorkOrder.count({ where: { ...whereBase, status: { in: ['PENDING', 'IN_PROGRESS'] } } }),
-      prisma.maintenanceWorkOrder.count({ where: { ...whereBase, status: { in: ['COMPLETED', 'COMPLETED_LATE'] } } }),
+      prisma.maintenanceWorkOrder.count({ where: { AND: [whereBase, { status: { in: ['PENDING', 'IN_PROGRESS'] } }] } }),
+      prisma.maintenanceWorkOrder.count({ where: { AND: [whereBase, { status: { in: ['COMPLETED', 'COMPLETED_LATE'] } }] } }),
       prisma.maintenanceWorkOrder.count({
         where: {
-          ...whereBase,
-          actualDueDate: { lt: new Date() },
-          status: { notIn: ['COMPLETED', 'COMPLETED_LATE', 'CANCELLED', 'SKIPPED'] },
+          AND: [
+            whereBase,
+            {
+              actualDueDate: { lt: new Date() },
+              status: { notIn: ['COMPLETED', 'COMPLETED_LATE', 'CANCELLED', 'SKIPPED'] },
+            },
+          ],
         },
       }),
     ]);

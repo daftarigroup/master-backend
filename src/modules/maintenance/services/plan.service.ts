@@ -7,16 +7,51 @@ import { planMapper } from './plan.mapper';
 import { parsePagination, paginationMeta } from './mapUtils';
 import { priorityFromNumber } from './priority';
 import { workOrderService } from './workOrder.service';
+import { UserAuthContext } from '../../../utils/currentUser';
 
 export const planService = {
-  async list(query: Record<string, any>) {
+  async list(query: Record<string, any>, auth?: UserAuthContext | null) {
     const { page, limit, skip } = parsePagination(query);
-    const where: Prisma.MaintenancePlanWhereInput = {
-      ...(query.machineId ? { machineId: query.machineId } : {}),
-      ...(query.frequency ? { frequency: query.frequency } : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search ? { title: { contains: query.search, mode: 'insensitive' } } : {}),
-    };
+    const andConditions: Prisma.MaintenancePlanWhereInput[] = [];
+
+    if (query.machineId) andConditions.push({ machineId: query.machineId });
+    if (query.frequency) andConditions.push({ frequency: query.frequency });
+    if (query.status) andConditions.push({ status: query.status });
+    if (query.search) andConditions.push({ title: { contains: query.search, mode: 'insensitive' } });
+
+    if (auth) {
+      if (auth.role === 'SUPER_ADMIN') {
+        if (query.firmId || query.projectId) {
+          const fId = BigInt(query.firmId || query.projectId);
+          andConditions.push({
+            OR: [{ firmId: fId }, { machine: { firmId: fId } }],
+          });
+        }
+      } else if (auth.role === 'ADMIN') {
+        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+        let allowedFirms = auth.permittedFirms;
+        if (requestedFirm !== null) {
+          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+        }
+        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+        andConditions.push({
+          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
+        });
+      } else {
+        // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
+        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+        let allowedFirms = auth.permittedFirms;
+        if (requestedFirm !== null) {
+          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+        }
+        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+        andConditions.push({
+          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
+        });
+      }
+    }
+
+    const where: Prisma.MaintenancePlanWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
     const [rows, total] = await Promise.all([planRepository.findMany(where, skip, limit), planRepository.count(where)]);
     return { data: rows.map(planMapper.toDTO), pagination: paginationMeta(page, limit, total) };
   },

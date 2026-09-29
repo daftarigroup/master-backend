@@ -1,12 +1,12 @@
 import { Response } from 'express';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { AuthenticatedRequest } from '../../../middleware/auth.middleware';
-import { currentUserId } from '../../../utils/currentUser';
+import { currentUserId, currentUserContext } from '../../../utils/currentUser';
 import { breakdownService } from '../services/breakdown.service';
 
 export const breakdownController = {
   list: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { data, pagination } = await breakdownService.list(req.query);
+    const { data, pagination } = await breakdownService.list(req.query, currentUserContext(req));
     res.json({ success: true, data, pagination });
   }),
   create: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

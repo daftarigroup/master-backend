@@ -1,12 +1,12 @@
 import { Response } from 'express';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { AuthenticatedRequest } from '../../../middleware/auth.middleware';
-import { currentUserId } from '../../../utils/currentUser';
+import { currentUserId, currentUserContext } from '../../../utils/currentUser';
 import { workOrderService } from '../services/workOrder.service';
 
 export const workOrderController = {
   list: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = await workOrderService.list(req.query, currentUserId(req));
+    const result = await workOrderService.list(req.query, currentUserContext(req));
     res.json(result);
   }),
   getById: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -18,7 +18,7 @@ export const workOrderController = {
     res.json(result);
   }),
   stats: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const data = await workOrderService.stats(req.query, currentUserId(req));
+    const data = await workOrderService.stats(req.query, currentUserContext(req));
     res.json({ status: 'success', data });
   }),
   transfer: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

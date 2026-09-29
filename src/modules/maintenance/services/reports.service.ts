@@ -9,13 +9,14 @@ function timeframeStart(timeframe: string): Date {
 }
 
 export const reportsService = {
-  async costAnalysis(query: { timeframe?: string; departmentId?: string }) {
+  async costAnalysis(query: { timeframe?: string; departmentId?: string; firmId?: string }) {
     const from = timeframeStart(query.timeframe ?? 'thisMonth');
     const workOrders = await prisma.maintenanceWorkOrder.findMany({
       where: {
         cost: { not: null },
         completedAt: { gte: from },
         ...(query.departmentId ? { machine: { departmentId: BigInt(query.departmentId) } } : {}),
+        ...(query.firmId ? { OR: [{ firmId: BigInt(query.firmId) }, { machine: { firmId: BigInt(query.firmId) } }] } : {}),
       },
       select: { cost: true, completedAt: true, machine: { select: { department: { select: { name: true } } } } },
     });
@@ -40,10 +41,13 @@ export const reportsService = {
     };
   },
 
-  async machineReliability(query: { timeframe?: string; departmentId?: string }) {
+  async machineReliability(query: { timeframe?: string; departmentId?: string; firmId?: string }) {
     const from = timeframeStart(query.timeframe ?? 'thisMonth');
     const machines = await prisma.machine.findMany({
-      where: { ...(query.departmentId ? { departmentId: BigInt(query.departmentId) } : {}) },
+      where: {
+        ...(query.departmentId ? { departmentId: BigInt(query.departmentId) } : {}),
+        ...(query.firmId ? { firmId: BigInt(query.firmId) } : {}),
+      },
       select: {
         id: true,
         name: true,

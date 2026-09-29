@@ -4,6 +4,7 @@ import { ApiError } from '../../../utils/ApiError';
 import { documentSequenceService } from '../../../services/documentSequence.service';
 import { dateToISO, decimalToNumberOrNull, parsePagination, paginationMeta, userDTO } from './mapUtils';
 import { workOrderService } from './workOrder.service';
+import { UserAuthContext } from '../../../utils/currentUser';
 
 const INCLUDE = {
   machine: { select: { id: true, name: true, assetCode: true, firmId: true, firm: { select: { id: true, firm_name: true } } } },
@@ -44,17 +45,54 @@ function toDTO(row: any) {
 }
 
 export const breakdownService = {
-  async list(query: Record<string, any>) {
+  async list(query: Record<string, any>, auth?: UserAuthContext | null) {
     const { page, limit, skip } = parsePagination(query);
-    const where: Prisma.BreakdownReportWhereInput = {
-      ...(query.machineId ? { machineId: query.machineId } : {}),
-      ...(query.severity ? { severity: query.severity } : {}),
-      ...(query.isResolved !== undefined
-        ? query.isResolved === 'true' || query.isResolved === true
-          ? { status: { in: ['RESOLVED', 'CLOSED'] } }
-          : { status: { notIn: ['RESOLVED', 'CLOSED'] } }
-        : {}),
-    };
+    const andConditions: Prisma.BreakdownReportWhereInput[] = [];
+
+    if (query.machineId) andConditions.push({ machineId: query.machineId });
+    if (query.severity) andConditions.push({ severity: query.severity });
+    if (query.isResolved !== undefined) {
+      if (query.isResolved === 'true' || query.isResolved === true) {
+        andConditions.push({ status: { in: ['RESOLVED', 'CLOSED'] } });
+      } else {
+        andConditions.push({ status: { notIn: ['RESOLVED', 'CLOSED'] } });
+      }
+    }
+
+    if (auth) {
+      if (auth.role === 'SUPER_ADMIN') {
+        if (query.firmId || query.projectId) {
+          const fId = BigInt(query.firmId || query.projectId);
+          andConditions.push({
+            OR: [{ firmId: fId }, { machine: { firmId: fId } }],
+          });
+        }
+      } else if (auth.role === 'ADMIN') {
+        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+        let allowedFirms = auth.permittedFirms;
+        if (requestedFirm !== null) {
+          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+        }
+        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+        andConditions.push({
+          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
+        });
+      } else {
+        // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
+        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+        let allowedFirms = auth.permittedFirms;
+        if (requestedFirm !== null) {
+          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+        }
+        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+        andConditions.push({
+          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
+        });
+      }
+    }
+
+    const where: Prisma.BreakdownReportWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
+
     const [rows, total] = await Promise.all([
       prisma.breakdownReport.findMany({ where, include: INCLUDE, orderBy: { reportedAt: 'desc' }, skip, take: limit }),
       prisma.breakdownReport.count({ where }),

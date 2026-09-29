@@ -1,11 +1,12 @@
 import { Response } from 'express';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { currentUserContext } from '../../../utils/currentUser';
 import { indentService } from '../services/indent.service';
 
 export const indentController = {
   list: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const data = await indentService.list(req.query);
+    const data = await indentService.list(req.query, currentUserContext(req));
     res.json({ status: 'success', data });
   }),
   getById: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -75,22 +76,22 @@ export const indentController = {
     res.json({ status: 'success', data });
   }),
 
-  storeIn: asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-    res.json({ status: 'success', data: await indentService.storeInList() });
+  storeIn: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ status: 'success', data: await indentService.storeInList(currentUserContext(req)) });
   }),
-  sentMachine: asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-    res.json({ status: 'success', data: await indentService.sentMachineList() });
+  sentMachine: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ status: 'success', data: await indentService.sentMachineList(currentUserContext(req)) });
   }),
-  payments: asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-    res.json({ status: 'success', data: await indentService.paymentsList() });
+  payments: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ status: 'success', data: await indentService.paymentsList(currentUserContext(req)) });
   }),
-  dashboardStats: asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-    res.json({ status: 'success', data: await indentService.dashboardStats() });
+  dashboardStats: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ status: 'success', data: await indentService.dashboardStats(currentUserContext(req)) });
   }),
   dailyReport: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    res.json(await indentService.dailyReport(req.query.date as string | undefined));
+    res.json(await indentService.dailyReport(req.query.date as string | undefined, req.query.firmId as string | undefined, currentUserContext(req)));
   }),
-  calendar: asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-    res.json({ status: 'success', data: await indentService.calendar() });
+  calendar: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ status: 'success', data: await indentService.calendar(req.query.firmId as string | undefined, currentUserContext(req)) });
   }),
 };

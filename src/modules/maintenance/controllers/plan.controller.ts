@@ -1,12 +1,12 @@
 import { Response } from 'express';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { AuthenticatedRequest } from '../../../middleware/auth.middleware';
-import { currentUserId } from '../../../utils/currentUser';
+import { currentUserId, currentUserContext } from '../../../utils/currentUser';
 import { planService } from '../services/plan.service';
 
 export const planController = {
   list: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { data, pagination } = await planService.list(req.query);
+    const { data, pagination } = await planService.list(req.query, currentUserContext(req));
     res.json({ status: 'success', data, pagination });
   }),
   getById: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

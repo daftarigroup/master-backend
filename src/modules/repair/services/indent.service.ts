@@ -4,6 +4,7 @@ import { ApiError } from '../../../utils/ApiError';
 import { documentSequenceService } from '../../../services/documentSequence.service';
 import { indentRepository, INDENT_INCLUDE } from '../repositories/indent.repository';
 import { indentMapper } from './indent.mapper';
+import { UserAuthContext } from '../../../utils/currentUser';
 
 type Tx = Prisma.TransactionClient;
 
@@ -54,16 +55,52 @@ async function applyCompletionCascade(tx: Tx, machineId: string | null, cost: nu
   });
 }
 
+function buildIndentScope(query: Record<string, any> = {}, auth?: UserAuthContext | null): Prisma.RepairIndentWhereInput {
+  const andConditions: Prisma.RepairIndentWhereInput[] = [];
+
+  if (query.machineId) andConditions.push({ machineId: query.machineId });
+  if (query.approvalStatus === 'Pending') andConditions.push({ approvalStatus: 'PENDING' });
+  if (query.approvalStatus === 'notPending') andConditions.push({ approvalStatus: { not: 'PENDING' } });
+  if (query.taskStatus) andConditions.push({ status: indentMapperStatus(query.taskStatus) });
+
+  if (auth) {
+    if (auth.role === 'SUPER_ADMIN') {
+      if (query.firmId || query.projectId) {
+        const fId = BigInt(query.firmId || query.projectId);
+        andConditions.push({
+          OR: [{ firmId: fId }, { machine: { firmId: fId } }, { asset: { firmId: fId } }],
+        });
+      }
+    } else if (auth.role === 'ADMIN') {
+      const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+      let allowedFirms = auth.permittedFirms;
+      if (requestedFirm !== null) {
+        allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+      }
+      const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+      andConditions.push({
+        OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }, { asset: { firmId: { in: ids } } }],
+      });
+    } else {
+      // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
+      const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
+      let allowedFirms = auth.permittedFirms;
+      if (requestedFirm !== null) {
+        allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
+      }
+      const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
+      andConditions.push({
+        OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }, { asset: { firmId: { in: ids } } }],
+      });
+    }
+  }
+
+  return andConditions.length > 0 ? { AND: andConditions } : {};
+}
+
 export const indentService = {
-  async list(query: Record<string, any>) {
-    const where: Prisma.RepairIndentWhereInput = {
-      ...(query.firmId ? { firmId: BigInt(query.firmId) } : {}),
-      ...(query.projectId ? { firmId: BigInt(query.projectId) } : {}),
-      ...(query.machineId ? { machineId: query.machineId } : {}),
-      ...(query.approvalStatus === 'Pending' ? { approvalStatus: 'PENDING' } : {}),
-      ...(query.approvalStatus === 'notPending' ? { approvalStatus: { not: 'PENDING' } } : {}),
-      ...(query.taskStatus ? { status: indentMapperStatus(query.taskStatus) } : {}),
-    };
+  async list(query: Record<string, any>, auth?: UserAuthContext | null) {
+    const where = buildIndentScope(query, auth);
     const rows = await indentRepository.findMany(where);
     return rows.map(indentMapper.toDTO);
   },
@@ -389,12 +426,13 @@ export const indentService = {
 
   // --- Dashboard / reporting ---
 
-  async dashboardStats() {
+  async dashboardStats(auth?: UserAuthContext | null) {
+    const scopeWhere = buildIndentScope({}, auth);
     const [total, inhouse, outhouse, completed] = await Promise.all([
-      prisma.repairIndent.count(),
-      prisma.repairIndent.count({ where: { routingType: 'INHOUSE' } }),
-      prisma.repairIndent.count({ where: { routingType: 'OUTHOUSE' } }),
-      prisma.repairIndent.count({ where: { status: { in: TERMINAL } } }),
+      prisma.repairIndent.count({ where: scopeWhere }),
+      prisma.repairIndent.count({ where: { AND: [scopeWhere, { routingType: 'INHOUSE' }] } }),
+      prisma.repairIndent.count({ where: { AND: [scopeWhere, { routingType: 'OUTHOUSE' }] } }),
+      prisma.repairIndent.count({ where: { AND: [scopeWhere, { status: { in: TERMINAL } }] } }),
     ]);
     return { total, inhouse, outhouse, completed };
   },
@@ -403,25 +441,37 @@ export const indentService = {
   // the ONE consumer actually rendered (main_repairbotivate_dailyreport.tsx).
   // repairSystemApi.getDailyReport()'s alternate {date,totalRepairs,...} shape is
   // dead code (no component reads it), so this endpoint serves this shape instead.
-  async dailyReport(date?: string) {
+  async dailyReport(date?: string, firmId?: string, auth?: UserAuthContext | null) {
     const day = date ? new Date(date) : new Date();
     const start = new Date(day.getFullYear(), day.getMonth(), day.getDate());
     const end = new Date(start.getTime() + 86400000);
 
+    const scopeWhere = buildIndentScope({ firmId }, auth);
+
     const [indentsToday, machines] = await Promise.all([
       prisma.repairIndent.findMany({
-        where: { OR: [{ createdAt: { gte: start, lt: end } }, { updatedAt: { gte: start, lt: end } }] },
+        where: {
+          AND: [
+            scopeWhere,
+            { OR: [{ createdAt: { gte: start, lt: end } }, { updatedAt: { gte: start, lt: end } }] },
+          ],
+        },
         include: {
           doer: { select: { name: true, user_name: true } },
           technician: { select: { name: true } },
-          machine: { select: { id: true, name: true, assetCode: true, serialNumber: true } },
-          asset: { select: { id: true, productName: true, assetCode: true } },
+          machine: { select: { id: true, name: true, assetCode: true, serialNumber: true, firmId: true } },
+          asset: { select: { id: true, productName: true, assetCode: true, firmId: true } },
           machinePart: { select: { name: true } },
           firm: { select: { id: true, firm_name: true } },
         },
         orderBy: { updatedAt: 'desc' },
       }),
-      prisma.machine.findMany({ select: { status: true } }),
+      prisma.machine.findMany({
+        where: auth?.role === 'ADMIN' || auth?.role === 'USER'
+          ? { firmId: { in: auth.permittedFirms.length > 0 ? auth.permittedFirms : [-1n] } }
+          : firmId ? { firmId: BigInt(firmId) } : {},
+        select: { status: true },
+      }),
     ]);
 
     const tasks = indentsToday.map((i) => {
@@ -429,9 +479,11 @@ export const indentService = {
       const machineId = i.machine?.assetCode || i.asset?.assetCode || i.machine?.serialNumber || machineName;
       const partInfo = i.machinePart?.name ? `Part: ${i.machinePart.name}` : '';
       const description = i.remarks || partInfo || (i.problem ? `Problem: ${i.problem}` : '');
+      const fId = i.firmId ?? i.machine?.firmId ?? i.asset?.firmId;
 
       return {
         id: i.id,
+        firmId: fId ? String(fId) : undefined,
         indentNumber: i.indentNumber || '',
         title: i.problem || (i.indentNumber ? `${i.indentNumber} – ${machineName}` : `Repair – ${machineName}`),
         problem: i.problem,
@@ -466,10 +518,12 @@ export const indentService = {
     };
   },
 
-  async calendar() {
-    const rows = await indentRepository.findMany({});
+  async calendar(firmId?: string, auth?: UserAuthContext | null) {
+    const scopeWhere = buildIndentScope({ firmId }, auth);
+    const rows = await indentRepository.findMany(scopeWhere);
     return rows.map((i) => ({
       id: i.id,
+      firmId: i.firmId ? String(i.firmId) : (i.machine?.firmId ? String(i.machine.firmId) : undefined),
       title: i.problem || `${i.machine?.name ?? 'Machine'} - ${i.machinePart?.name ?? 'Repair'}`,
       date: i.createdAt.toISOString().slice(0, 10),
       status: i.status,
@@ -487,8 +541,10 @@ export const indentService = {
   // project the real RepairReceiving/RepairDispatch/RepairPayment child tables,
   // which repairSystemApi.getStoreIn/getSentMachine/getPayments actually read.
 
-  async storeInList() {
+  async storeInList(auth?: UserAuthContext | null) {
+    const scopeWhere = buildIndentScope({}, auth);
     const rows = await prisma.repairReceiving.findMany({
+      where: { outhouseRepair: { indent: scopeWhere } },
       include: { outhouseRepair: { include: { indent: { include: { machine: true, vendor: true } } } } },
       orderBy: { receivedAt: 'desc' },
     });
@@ -510,8 +566,10 @@ export const indentService = {
     }));
   },
 
-  async sentMachineList() {
+  async sentMachineList(auth?: UserAuthContext | null) {
+    const scopeWhere = buildIndentScope({}, auth);
     const rows = await prisma.repairDispatch.findMany({
+      where: { outhouseRepair: { indent: scopeWhere } },
       include: { outhouseRepair: { include: { indent: { include: { machine: true, vendor: true } } } } },
       orderBy: { sentAt: 'desc' },
     });
@@ -533,8 +591,10 @@ export const indentService = {
     }));
   },
 
-  async paymentsList() {
+  async paymentsList(auth?: UserAuthContext | null) {
+    const scopeWhere = buildIndentScope({}, auth);
     const rows = await prisma.repairPayment.findMany({
+      where: { outhouseRepair: { indent: scopeWhere } },
       include: { outhouseRepair: { include: { indent: { include: { machine: true, vendor: true } } } } },
       orderBy: { paidAt: 'desc' },
     });
