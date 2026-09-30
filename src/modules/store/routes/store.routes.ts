@@ -16,6 +16,7 @@ import {
 } from '../validators/indent.validator';
 
 import { StageResetController } from '../controllers/stageReset.controller';
+import { POController } from '../controllers/po.controller';
 
 const router = Router();
 const indentController = new IndentController();
@@ -23,6 +24,11 @@ const userController = new UserController();
 const genericController = new GenericController();
 const uploadController = new UploadController();
 const stageResetController = new StageResetController();
+const poController = new POController();
+
+// ==================== PURCHASE ORDER QUEUED ROUTES ====================
+router.get('/po/next-number', poController.getNextPoNumber);
+router.post('/po/create', poController.createPO);
 
 // ==================== USER ROUTES ====================
 router.get('/users', userController.getUsers);

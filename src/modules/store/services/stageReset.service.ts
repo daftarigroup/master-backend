@@ -1,6 +1,7 @@
 import { prisma } from '../../../database/prisma';
 import { PcReportService } from './pcReport.service';
 import { InventoryStockService } from './inventoryStock.service';
+import { invalidateTableCache } from '../controllers/generic.controller';
 
 export class StageResetService {
   private pcReportService: PcReportService;
@@ -446,16 +447,121 @@ export class StageResetService {
    * Reset PO Creation Stage:
    * 1. Resets linked indent records (clears po_number, po_copy, actual4, planned5, time_delay4)
    * 2. Clears / resets downstream store_in records if any were created for this PO
-   * 3. Deletes all records from po_master for this po_number
+  /**
+   * Reset PO Creation Stage:
+   * 1. Resets linked indent records (clears po_number, po_copy, actual4, planned5, time_delay4)
+   * 2. Clears / resets downstream store_in records if any were created for this PO
+   * 3. Deletes records from po_master for this po_number (scoped by firm/vendor/date when provided)
    * 4. Recalculates affected stage KPIs
    */
-  async resetPOCreation(poNumber: string) {
+  async resetPOCreation(
+    poNumber: string,
+    scope?: { firmId?: number; vendorName?: string; poCreatedDate?: string }
+  ) {
     if (!poNumber || !poNumber.trim()) {
       throw new Error('PO Number is required to reset PO Creation');
     }
 
     const cleanPo = poNumber.trim();
 
+    // Check if we need to scope by firmId, vendorName, or date (failsafe for duplicate PO numbers)
+    let targetRowIds: bigint[] | null = null;
+    let targetIndentNumbers: string[] | null = null;
+
+    if (scope?.firmId || scope?.vendorName || scope?.poCreatedDate) {
+      const whereConditions: any = { po_number: cleanPo };
+      if (scope.firmId) {
+        whereConditions.firm_id = BigInt(scope.firmId);
+      }
+      if (scope.vendorName) {
+        whereConditions.party_name = { equals: scope.vendorName.trim(), mode: 'insensitive' };
+      }
+
+      let matchingRows = await prisma.poMaster.findMany({
+        where: whereConditions,
+        select: { id: true, internal_code: true, po_created_date: true, timestamp: true },
+      });
+
+      // If poCreatedDate was provided and there are multiple matching rows, filter by dateKey
+      if (scope.poCreatedDate && matchingRows.length > 1) {
+        const normalizeDate = (raw: any): string => {
+          if (!raw) return '';
+          const d = new Date(raw);
+          return isNaN(d.getTime()) ? String(raw).trim() : d.toISOString().slice(0, 10);
+        };
+        const targetDateKey = normalizeDate(scope.poCreatedDate);
+        const filtered = matchingRows.filter((r) => {
+          const rDateKey1 = normalizeDate(r.po_created_date);
+          const rDateKey2 = normalizeDate(r.timestamp);
+          return (
+            rDateKey1 === targetDateKey ||
+            rDateKey2 === targetDateKey ||
+            String(r.po_created_date).trim() === String(scope.poCreatedDate).trim()
+          );
+        });
+        if (filtered.length > 0) {
+          matchingRows = filtered;
+        }
+      }
+
+      if (matchingRows.length > 0) {
+        targetRowIds = matchingRows.map((r) => r.id);
+        targetIndentNumbers = Array.from(
+          new Set(
+            matchingRows
+              .map((r) => (r.internal_code ? String(r.internal_code).trim() : ''))
+              .filter(Boolean)
+          )
+        );
+      }
+    }
+
+    if (targetRowIds && targetRowIds.length > 0 && targetIndentNumbers && targetIndentNumbers.length > 0) {
+      // SCOPED RESET: Only affects this specific PO instance!
+      // 1. Reset ONLY matching indents for this PO instance
+      await prisma.indent.updateMany({
+        where: {
+          AND: [
+            { po_number: cleanPo },
+            { indent_number: { in: targetIndentNumbers } },
+          ],
+        },
+        data: {
+          po_number: null,
+          po_copy: null,
+          actual4: null,
+          planned5: null,
+          time_delay4: null,
+        },
+      });
+
+      // 2. Delete downstream store_in records ONLY for this PO instance's indents
+      await prisma.storeIn.deleteMany({
+        where: {
+          AND: [
+            { po_number: cleanPo },
+            { indent_no: { in: targetIndentNumbers } },
+          ],
+        },
+      });
+
+      // 3. Delete ONLY the target po_master records
+      const deleteResult = await prisma.poMaster.deleteMany({
+        where: { id: { in: targetRowIds } },
+      });
+
+      invalidateTableCache('po_master');
+      invalidateTableCache('indent');
+
+      // 4. Recalculate KPIs
+      await this.pcReportService.recalculateStageKpis('Approval And Rejection For Purchase');
+      await this.pcReportService.recalculateStageKpis('PO WebApp');
+      await this.pcReportService.recalculateStageKpis('Material Lifting');
+
+      return { success: true, count: deleteResult.count, scoped: true };
+    }
+
+    // UNSCOPED FALLBACK (standard behavior when only 1 PO with this number exists or no scope provided)
     // 1. Reset matching indents so they move back to Pending PO to Make
     await prisma.indent.updateMany({
       where: { po_number: cleanPo },
@@ -478,12 +584,15 @@ export class StageResetService {
       where: { po_number: cleanPo },
     });
 
+    invalidateTableCache('po_master');
+    invalidateTableCache('indent');
+
     // 4. Recalculate KPIs
     await this.pcReportService.recalculateStageKpis('Approval And Rejection For Purchase');
     await this.pcReportService.recalculateStageKpis('PO WebApp');
     await this.pcReportService.recalculateStageKpis('Material Lifting');
 
-    return { success: true, count: deleteResult.count };
+    return { success: true, count: deleteResult.count, scoped: false };
   }
 
   /**

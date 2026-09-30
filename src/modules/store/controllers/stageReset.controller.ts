@@ -44,7 +44,15 @@ export class StageResetController {
 
   resetPOCreation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const poNumber = String(req.body.poNumber || req.params.poNumber || '').trim();
-    const result = await this.service.resetPOCreation(poNumber);
+    const firmId = req.body.firmId ? Number(req.body.firmId) : undefined;
+    const vendorName = req.body.vendorName ? String(req.body.vendorName).trim() : undefined;
+    const poCreatedDate = req.body.poCreatedDate ? String(req.body.poCreatedDate).trim() : undefined;
+
+    const result = await this.service.resetPOCreation(poNumber, {
+      firmId,
+      vendorName,
+      poCreatedDate,
+    });
     res.json({ success: true, message: `PO '${poNumber}' reset and deleted successfully`, data: result });
   });
 

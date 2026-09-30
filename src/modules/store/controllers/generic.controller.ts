@@ -445,7 +445,7 @@ function parseWhereFilters(tableName: string, filters: Record<string, any>): Rec
 }
 
 // Normalize all fields in a request body using Prisma model schema metadata
-function normalizeBody(tableName: string, body: Record<string, any>): Record<string, any> {
+export function normalizeBody(tableName: string, body: Record<string, any>): Record<string, any> {
   const fieldsMap = getModelFields(tableName);
 
   const out: Record<string, any> = {};
