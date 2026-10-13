@@ -5,6 +5,7 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../database/prisma';
+import { StockService } from './stock.service';
 
 export class InventoryStockService {
   private prisma: any;
@@ -51,59 +52,8 @@ export class InventoryStockService {
     if (!productName) return;
     const db = tx || this.prisma || prisma;
 
-    // 1. Indented quantity & Approved quantity from indent
-    const indentStats: any[] = await db.$queryRaw`
-      SELECT 
-        COALESCE(SUM(CAST(NULLIF(quantity, '') AS NUMERIC)), 0) as indented,
-        COALESCE(SUM(CAST(NULLIF(approved_quantity, '') AS NUMERIC)), 0) as approved
-      FROM indent
-      WHERE product_name = ${productName}
-    `;
-
-    // 2. Purchase quantity & Received quantity & Return quantity from store_in
-    const storeInStats: any[] = await db.$queryRaw`
-      SELECT 
-        COALESCE(SUM(CAST(NULLIF(qty, '') AS NUMERIC)), 0) as purchase_quantity,
-        COALESCE(SUM(CAST(NULLIF(received_quantity, '') AS NUMERIC)), 0) as received_quantity,
-        COALESCE(SUM(CASE WHEN status = 'Reject' THEN CAST(NULLIF(received_quantity, '') AS NUMERIC) ELSE 0 END), 0) as return_quantity
-      FROM store_in
-      WHERE product_name = ${productName}
-    `;
-
-    // 3. Request quantity & Out quantity from issue
-    const issueStats: any[] = await db.$queryRaw`
-      SELECT 
-        COALESCE(SUM(CAST(NULLIF(quantity, '') AS NUMERIC)), 0) as request_quantity,
-        COALESCE(SUM(CAST(NULLIF(given_qty, '') AS NUMERIC)), 0) as out_quantity
-      FROM issue
-      WHERE product_name = ${productName}
-    `;
-
-    const indented = Number(indentStats?.[0]?.indented || 0);
-    const approved = Number(indentStats?.[0]?.approved || 0);
-
-    const purchase_quantity = Number(storeInStats?.[0]?.purchase_quantity || 0);
-    const received_quantity = Number(storeInStats?.[0]?.received_quantity || 0);
-    const return_quantity = Number(storeInStats?.[0]?.return_quantity || 0);
-
-    const request_quantity = Number(issueStats?.[0]?.request_quantity || 0);
-    const out_quantity = Number(issueStats?.[0]?.out_quantity || 0);
-
-    const current = received_quantity - return_quantity - out_quantity;
-
-    await db.$executeRaw`
-      UPDATE inventory
-      SET 
-        indented = ${indented},
-        approved = ${approved},
-        purchase_quantity = ${purchase_quantity},
-        received_quantity = ${received_quantity},
-        return_quantity = ${return_quantity},
-        request_quantity = ${request_quantity},
-        out_quantity = ${out_quantity},
-        current = ${String(current)}
-      WHERE item_name = ${productName}
-    `;
+    // per project + group head + name, with opening, material date, transfers and issue returns (see stock.service.ts)
+    await StockService.syncInventory(db, productName);
   }
 
   /**

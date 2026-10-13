@@ -1,3 +1,4 @@
+// DEPRECATED (fleet refactor, Phase 6): the Repair screens were merged into Maintenance & Repair Work Orders. Only vendors (GET /vendors) is still used by the UI; the rest is kept for history and removed with the tables in Phase 7.
 import { Router } from 'express';
 import { validate } from '../../../middleware/validate.middleware';
 import { indentController } from '../controllers/indent.controller';

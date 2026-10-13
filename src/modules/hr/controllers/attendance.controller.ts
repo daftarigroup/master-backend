@@ -525,7 +525,11 @@ export class AttendanceController {
     const submissionTime =
       time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const submittedBy = String(
-      (req as any).user?.name || (req as any).user?.email || (req as any).user?.id || 'Incharge'
+      (req as any).user?.name ||
+        (req as any).user?.email ||
+        (req as any).user?.id ||
+        req.body?.submittedBy ||
+        'Kiosk / QR'
     );
 
     const result = await prisma.$transaction(async (tx) => {

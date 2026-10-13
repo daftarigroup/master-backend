@@ -1,9 +1,22 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../database/prisma';
 
+import { WORK_ORDER_INCLUDE } from './workOrder.repository';
+
 export const MACHINE_INCLUDE = {
   department: true,
   firm: { select: { id: true, firm_name: true } },
+  siteLocation: { select: { id: true, location: true } },
+  parts: true,
+  assignments: {
+    where: { endedAt: null },
+    select: {
+      id: true,
+      firmId: true,
+      firm: { select: { id: true, firm_name: true } },
+      responsible: { select: { id: true, name: true, employee: { select: { email: true } } } },
+    },
+  },
   _count: { select: { workOrders: true, breakdownReports: true, parts: true, maintenancePlans: true } },
 } satisfies Prisma.MachineInclude;
 
@@ -21,10 +34,13 @@ export const machineRepository = {
       where: { id },
       include: {
         ...MACHINE_INCLUDE,
-        parts: true,
-        maintenancePlans: { take: 10, orderBy: { createdAt: 'desc' } },
-        breakdownReports: { take: 10, orderBy: { reportedAt: 'desc' } },
-        workOrders: { take: 10, orderBy: { createdAt: 'desc' } },
+        maintenancePlans: { take: 20, orderBy: { createdAt: 'desc' } },
+        breakdownReports: { take: 20, orderBy: { reportedAt: 'desc' } },
+        workOrders: {
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+          include: WORK_ORDER_INCLUDE,
+        },
       },
     });
   },

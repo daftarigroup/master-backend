@@ -26,8 +26,12 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
       next();
     });
   } else {
-    // For development / backwards compatibility during initial migration, allow optional auth context fallback
-    if (config.env !== 'production') {
+    // No token: the request carries no user and carries on, exactly as it always did in production. This middleware is mounted
+    // on ALL of /api, including login, the public QR page and the health check, so it must not reject here; routes that need a
+    // user use requireLogin (below) or requireUserId. Outside production the request used to be silently promoted to
+    // SUPER_ADMIN, which bypasses all firm scoping and cost permissions on any non-production deployment: that is now an
+    // explicit local-dev opt-in.
+    if (config.env !== 'production' && process.env.ALLOW_DEV_AUTH_FALLBACK === 'true') {
       req.user = {
         id: '1',
         email: 'admin@example.com',
@@ -37,4 +41,10 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
     }
     next();
   }
+};
+
+/** For routers that are for logged-in users only (the fleet / equipment / cost routes): no user is a 401. */
+export const requireLogin = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+  if (!req.user) return next(new ApiError(401, 'Unauthorized: login required'));
+  next();
 };

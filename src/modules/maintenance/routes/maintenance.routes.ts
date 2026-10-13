@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../../../middleware/validate.middleware';
+import { validateParsed } from '../../../middleware/validateParsed.middleware';
 import { machineController } from '../controllers/machine.controller';
 import { machinePartController } from '../controllers/machinePart.controller';
 import { activityTypeController } from '../controllers/activityType.controller';
@@ -8,19 +9,24 @@ import { workOrderController } from '../controllers/workOrder.controller';
 import { breakdownController } from '../controllers/breakdown.controller';
 import { dailyMachineLogController } from '../controllers/dailyMachineLog.controller';
 import { reportsController } from '../controllers/reports.controller';
+import recordsRoutes from './records.routes';
 import {
   cancelWorkOrderSchema,
   createBreakdownSchema,
   createDailyMachineLogSchema,
-  createMachineSchema,
   createPlanSchema,
   extendWorkOrderSchema,
   markNotDoneSchema,
   rejectWorkOrderSchema,
   transferWorkOrderSchema,
 } from '../validators/maintenance.validator';
+import { createMachineOwnershipSchema, listMachinesSchema, updateMachineSchema } from '../validators/machine.validator';
+import { checklistItemSchema, createWorkOrderSchema, markDoneSchema, outsourcePaySchema, outsourceReceiveSchema, outsourceSendSchema, partUsedSchema, reassignSchema } from '../validators/workOrder.validator';
 
 const router = Router();
+
+// Maintenance Records, service schedules, checklist templates, machine documents
+router.use(recordsRoutes);
 
 // Reports (mounted before /machines etc. only matters for path specificity, not overlap here)
 router.get('/reports/cost-analysis', reportsController.costAnalysis);
@@ -73,10 +79,10 @@ router.post('/activity-types', activityTypeController.create);
 router.delete('/activity-types/:id', activityTypeController.delete);
 
 // Machines
-router.get('/machines', machineController.list);
+router.get('/machines', validateParsed(listMachinesSchema), machineController.list);
 router.get('/machines/:id', machineController.getById);
-router.post('/machines', validate(createMachineSchema), machineController.create);
-router.patch('/machines/:id', machineController.update);
+router.post('/machines', validateParsed(createMachineOwnershipSchema), machineController.create);
+router.patch('/machines/:id', validateParsed(updateMachineSchema), machineController.update);
 router.delete('/machines/:id', machineController.delete);
 
 // Machine Parts
@@ -87,6 +93,7 @@ router.patch('/machine-parts/:id', machinePartController.update);
 router.delete('/machine-parts/:id', machinePartController.delete);
 
 // Plans
+// DEPRECATED (fleet refactor, Phase 6): the Plans page is gone; work orders own their content. Kept for history.
 router.get('/plans', planController.list);
 router.get('/plans/:id', planController.getById);
 router.post('/plans', validate(createPlanSchema), planController.create);
@@ -100,8 +107,14 @@ router.get('/work-orders/approval-history', workOrderController.approvalHistory)
 router.get('/work-orders/stats', workOrderController.stats);
 router.get('/work-orders/:id', workOrderController.getById);
 router.get('/work-orders', workOrderController.list);
-router.post('/work-orders/:id/transfer', validate(transferWorkOrderSchema), workOrderController.transfer);
-router.post('/work-orders/:id/mark-done', workOrderController.markDone);
+router.post('/work-orders', validateParsed(createWorkOrderSchema), workOrderController.create);
+// reassign: a reason is required; /transfer is the older name for the same action
+router.post('/work-orders/:id/reassign', validateParsed(reassignSchema), workOrderController.transfer);
+router.post('/work-orders/:id/transfer', validateParsed(reassignSchema), workOrderController.transfer);
+router.post('/work-orders/:id/mark-done', validateParsed(markDoneSchema), workOrderController.markDone);
+router.patch('/work-orders/:id/checklist/:itemId', validateParsed(checklistItemSchema), workOrderController.setChecklistItem);
+router.post('/work-orders/:id/parts', validateParsed(partUsedSchema), workOrderController.addPart);
+router.delete('/work-orders/:id/parts/:partId', workOrderController.removePart);
 router.post('/work-orders/:id/mark-not-done', validate(markNotDoneSchema), workOrderController.markNotDone);
 router.post('/work-orders/:id/extend', validate(extendWorkOrderSchema), workOrderController.extend);
 router.post('/work-orders/:id/hold', workOrderController.hold);
@@ -110,6 +123,16 @@ router.post('/work-orders/:id/skip', workOrderController.skip);
 router.post('/work-orders/:id/approve', workOrderController.approve);
 router.post('/work-orders/:id/reject', validate(rejectWorkOrderSchema), workOrderController.reject);
 router.post('/work-orders/:id/process-repair', workOrderController.processRepair);
+// parts the repair needs from the Store; one click raises the Store indent for them
+router.get('/work-orders/:id/parts-needed', workOrderController.listPartsNeeded);
+router.post('/work-orders/:id/parts-needed', workOrderController.addPartNeeded);
+router.post('/work-orders/:id/parts-needed/indent', workOrderController.raiseIndent);
+router.patch('/work-orders/:id/parts-needed/:partId', workOrderController.updatePartNeeded);
+router.delete('/work-orders/:id/parts-needed/:partId', workOrderController.removePartNeeded);
+// Simplified out-source track: To send -> Sent -> Received -> Paid
+router.post('/work-orders/:id/outsource/send', validateParsed(outsourceSendSchema), workOrderController.outsourceSend);
+router.post('/work-orders/:id/outsource/receive', validateParsed(outsourceReceiveSchema), workOrderController.outsourceReceive);
+router.post('/work-orders/:id/outsource/pay', validateParsed(outsourcePaySchema), workOrderController.outsourcePay);
 
 // Breakdowns
 router.get('/breakdowns', breakdownController.list);
@@ -118,8 +141,10 @@ router.put('/breakdowns/:id/resolve', breakdownController.resolve);
 router.put('/breakdowns/:id/status', breakdownController.updateStatus);
 
 // Daily Machine Logs
+// DEPRECATED (fleet refactor, Phase 6): replaced by /api/fleet/usage-logs (Daily Entry). Old rows are read-only history.
 router.get('/daily-machine-logs/stats', dailyMachineLogController.stats);
 router.get('/daily-machine-logs', dailyMachineLogController.list);
-router.post('/daily-machine-logs', validate(createDailyMachineLogSchema), dailyMachineLogController.create);
+// read-only since the Work Logs release: new usage is recorded in Work Logs (/api/fleet/work-logs); this answers 410
+router.post('/daily-machine-logs', dailyMachineLogController.create);
 
 export default router;

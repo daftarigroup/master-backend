@@ -1,3 +1,5 @@
+import { ApiError } from '../../../utils/ApiError';
+import { parseBigIntId, parseFirmId } from '../../../utils/firmScope';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../database/prisma';
 import { dateToISO, dateToISODate, decimalToNumber, parsePagination, paginationMeta } from './mapUtils';
@@ -41,7 +43,7 @@ export const dailyMachineLogService = {
     const where: Prisma.DailyMachineLogWhereInput = {
       ...(query.machineId ? { machineId: query.machineId } : {}),
       ...(query.date ? { date: new Date(query.date) } : {}),
-      ...(query.firmId ? { OR: [{ firmId: BigInt(query.firmId) }, { machine: { firmId: BigInt(query.firmId) } }] } : {}),
+      ...(parseFirmId(query.firmId) !== null ? { OR: [{ firmId: parseFirmId(query.firmId)! }, { machine: { firmId: parseFirmId(query.firmId)! } }] } : {}), // 'all' = no filter
     };
     const [rows, total] = await Promise.all([
       prisma.dailyMachineLog.findMany({ where, include: INCLUDE, orderBy: { date: 'desc' }, skip, take: limit }),
@@ -57,7 +59,8 @@ export const dailyMachineLogService = {
     return grouped.map((g) => ({ machineId: g.machineId, machineName: nameById.get(g.machineId) ?? g.machineId, totalHours: decimalToNumber(g._sum.runtimeHours) }));
   },
 
-  async create(body: {
+  /** Read-only since the Work Logs release: nothing is written and Machine.runningHours is no longer incremented. */
+  async create(_body: {
     machineId: string;
     date: string;
     startTimeReading?: string;
@@ -69,29 +72,6 @@ export const dailyMachineLogService = {
     remarks?: string;
     firmId?: string;
   }) {
-    const machine = await prisma.machine.findUnique({ where: { id: body.machineId }, select: { firmId: true } });
-    const targetFirmId = body.firmId ? BigInt(body.firmId) : machine?.firmId;
-
-    const row = await prisma.dailyMachineLog.create({
-      data: {
-        machine: { connect: { id: body.machineId } },
-        ...(targetFirmId ? { firm: { connect: { id: targetFirmId } } } : {}),
-        date: new Date(body.date),
-        startTimeReading: body.startTimeReading ?? null,
-        endTimeReading: body.endTimeReading ?? null,
-        runtimeHours: body.runtimeHours,
-        temperature: body.temperature,
-        load: body.load,
-        operatorName: body.operatorName,
-        remarks: body.remarks ?? null,
-      },
-      include: INCLUDE,
-    });
-
-    // Running-hours meter feeds RUNNING_HOURS-frequency plans — keep Machine's
-    // cumulative meter in sync so those triggers can be evaluated against it.
-    await prisma.machine.update({ where: { id: body.machineId }, data: { runningHours: { increment: body.runtimeHours } } });
-
-    return toDTO(row);
+    throw new ApiError(410, 'The old daily machine log is read-only. Record machine usage in Work Logs instead.', ['LEGACY_DAILY_LOG_READ_ONLY']);
   },
 };

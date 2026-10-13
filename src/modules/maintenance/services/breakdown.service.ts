@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../database/prisma';
 import { ApiError } from '../../../utils/ApiError';
+import { machineRowFirmFilter, parseBigIntId } from '../../../utils/firmScope';
 import { documentSequenceService } from '../../../services/documentSequence.service';
 import { dateToISO, decimalToNumberOrNull, parsePagination, paginationMeta, userDTO } from './mapUtils';
 import { workOrderService } from './workOrder.service';
@@ -60,35 +61,8 @@ export const breakdownService = {
     }
 
     if (auth) {
-      if (auth.role === 'SUPER_ADMIN') {
-        if (query.firmId || query.projectId) {
-          const fId = BigInt(query.firmId || query.projectId);
-          andConditions.push({
-            OR: [{ firmId: fId }, { machine: { firmId: fId } }],
-          });
-        }
-      } else if (auth.role === 'ADMIN') {
-        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
-        let allowedFirms = auth.permittedFirms;
-        if (requestedFirm !== null) {
-          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
-        }
-        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
-        andConditions.push({
-          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
-        });
-      } else {
-        // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
-        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
-        let allowedFirms = auth.permittedFirms;
-        if (requestedFirm !== null) {
-          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
-        }
-        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
-        andConditions.push({
-          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
-        });
-      }
+      const firmFilter = machineRowFirmFilter(auth, query.firmId ?? query.projectId);
+      if (firmFilter) andConditions.push(firmFilter);
     }
 
     const where: Prisma.BreakdownReportWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
@@ -121,7 +95,7 @@ export const breakdownService = {
           estimatedDowntimeHours: body.estimatedDowntimeHours ?? null,
           remarks: body.remarks ?? null,
           ...(reportedByUserId ? { reportedBy: { connect: { id: reportedByUserId } } } : {}),
-          ...(body.assignToUserId ? { assignedTo: { connect: { id: BigInt(body.assignToUserId) } } } : {}),
+          ...(body.assignToUserId ? { assignedTo: { connect: { id: parseBigIntId(body.assignToUserId, 'assignToUserId') } } } : {}),
         },
         include: INCLUDE,
       });
@@ -133,11 +107,15 @@ export const breakdownService = {
 
       await workOrderService.createInternal(tx, {
         machineId: body.machineId,
+        firmId: machine.firmId,
         breakdownReportId: breakdown.id,
         type: 'BREAKDOWN',
         actualDueDate: new Date(),
         priority: body.severity,
-        currentAssigneeUserId: body.assignToUserId ? BigInt(body.assignToUserId) : undefined,
+        currentAssigneeUserId: body.assignToUserId ? parseBigIntId(body.assignToUserId, 'assignToUserId') : undefined,
+        title: `Breakdown - ${machine.name}: ${body.failureType}`,
+        description: body.description,
+        requestedById: reportedByUserId,
       });
 
       const full = await tx.breakdownReport.findUniqueOrThrow({ where: { id: breakdown.id }, include: INCLUDE });

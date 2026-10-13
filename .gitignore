@@ -15,6 +15,9 @@ dist/
 .agents/
 .claude/
 
-*.sql
+# *.sql
 backups/
 scripts/
+backups_docs_v1/
+insert data/
+tests/

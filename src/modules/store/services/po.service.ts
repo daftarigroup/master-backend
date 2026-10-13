@@ -10,6 +10,7 @@ import { ApiError } from '../../../utils/ApiError';
 import { SchedulePlannerService } from './schedulePlanner.service';
 import { DelayCalculatorService } from './delayCalculator.service';
 import { PcReportService } from './pcReport.service';
+import { ItemRefService } from './itemRef.service';
 import {
   normalizeBody,
   syncTableSequence,
@@ -211,6 +212,7 @@ export class POCreationService {
         delete itemData.id;
 
         const data = normalizeBody('po_master', itemData);
+        await ItemRefService.fillOnCreate(tx, 'po_master', data); // store_item_ref_v1
         let created: any;
         try {
           created = await tx.poMaster.create({ data: data as any });

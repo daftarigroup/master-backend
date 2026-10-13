@@ -2,6 +2,8 @@ import { prisma } from '../../../database/prisma';
 import { PcReportService } from './pcReport.service';
 import { InventoryStockService } from './inventoryStock.service';
 import { invalidateTableCache } from '../controllers/generic.controller';
+import { StoreDieselService } from './storeDiesel.service';
+import { StoreMaintenanceService } from './storeMaintenance.service';
 
 export class StageResetService {
   private pcReportService: PcReportService;
@@ -608,6 +610,7 @@ export class StageResetService {
       throw new Error(`Issue record with ID ${id} not found`);
     }
 
+    await StoreMaintenanceService.assertUndoable(prisma as any, id); // a completed repair keeps the parts it consumed
     const updated = await prisma.issue.update({
       where: { id: BigInt(id) },
       data: {
@@ -621,6 +624,10 @@ export class StageResetService {
       const inventoryService = new InventoryStockService();
       await inventoryService.syncInventoryItemAggregations(existing.product_name);
     }
+
+    // the machine diesel log of a Store diesel issue disappears with the approval (voided, history kept)
+    await StoreDieselService.reconcile(prisma as any, id, null);
+    await StoreMaintenanceService.reconcile(prisma as any, id);
 
     return updated;
   }

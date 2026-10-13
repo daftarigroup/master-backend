@@ -10,6 +10,12 @@ import { SchedulePlannerService } from '../services/schedulePlanner.service';
 import { DelayCalculatorService } from '../services/delayCalculator.service';
 import { InventoryStockService } from '../services/inventoryStock.service';
 import { PcReportService } from '../services/pcReport.service';
+import { ItemRefService } from '../services/itemRef.service';
+import { IssueKindService } from '../services/issueKind.service';
+import { currentUserContext } from '../../../utils/currentUser';
+import type { AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { StoreDieselService } from '../services/storeDiesel.service';
+import { StoreMaintenanceService } from '../services/storeMaintenance.service';
 
 // ============================================================
 // Per-table TTL configuration based on update frequency:
@@ -479,6 +485,8 @@ const TABLE_INCLUDES: Record<string, Record<string, any>> = {
   payments: { firm: true },
   stock_transfers: { from_firm: true, to_firm: true },
   fullkitting: { firm: true },
+  // store_issue_kind_v1: the machine of a diesel / parts issue (name for Store Data; null for a material issue)
+  issue: { machine: { select: { name: true, assetCode: true, readingUnit: true } }, work_order: { select: { workOrderCode: true, title: true, status: true, repairParts: { select: { partName: true, quantity: true } } } } },
 };
 
 export class GenericController {
@@ -735,6 +743,8 @@ export class GenericController {
         if (data.active === undefined && (table === 'firm' || table === 'default_po_terms')) {
           data.active = true;
         }
+        if (table === 'issue') await IssueKindService.prepare(tx, currentUserContext(req as AuthenticatedRequest), data, null); // store_issue_kind_v1
+        await ItemRefService.fillOnCreate(tx, table, data); // store_item_ref_v1
 
         // Pre-Mutation Hooks (Sequence Generation & Date Planning)
         if (table === 'indent') {
@@ -802,6 +812,7 @@ export class GenericController {
             await inventoryService.calculatePendingLiftQty(finalRecord.indent_no, tx);
           }
           await pcReportService.recalculateStageKpis('Received In Store', tx);
+          // Phase 2: diesel no longer goes into a project tank (the Store inventory is the only stock)
         } else if (table === 'issue') {
           const delays = DelayCalculatorService.calculateIssueDelays(created, tx);
           const hasDelays = Object.values(delays).some((v) => v !== null);
@@ -816,6 +827,9 @@ export class GenericController {
             await inventoryService.syncInventoryItemAggregations(finalRecord.product_name, tx);
           }
           await pcReportService.recalculateStageKpis('Issue Data', tx);
+          // an issue that is created already Approved (not the normal flow) gets its machine diesel log straight away
+          if (finalRecord?.issue_kind === 'ASSET_DIESEL') await StoreDieselService.reconcile(tx, finalRecord.id, currentUserContext(req as AuthenticatedRequest).userId);
+          if (finalRecord?.issue_kind === 'MAINTENANCE') await StoreMaintenanceService.reconcile(tx, finalRecord.id);
         } else if (table === 'tally_entry') {
           const delays = DelayCalculatorService.calculateTallyEntryDelays(created, tx);
           const hasDelays = Object.values(delays).some((v) => v !== null);
@@ -852,6 +866,9 @@ export class GenericController {
 
     // Invalidate cached query results for the mutated table and dependencies
     invalidateTableCache(table);
+    if (['issue', 'store_in', 'indent', 'store_in_direct'].includes(table)) {
+      invalidateTableCache('inventory');
+    }
 
     res.status(201).json({
       success: true,
@@ -873,6 +890,13 @@ export class GenericController {
 
     const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const model = getPrismaModel(table, tx);
+
+      // store_item_ref_v1: keep item_id in step when the display name changes
+      if (ItemRefService.hasItemRef(table)) {
+        const current = await model.findUnique({ where: { id: numericId } });
+        if (table === 'issue') await IssueKindService.prepare(tx, currentUserContext(req as AuthenticatedRequest), data, current); // store_issue_kind_v1
+        await ItemRefService.fillOnUpdate(tx, table, current, data);
+      }
 
       // Pre-Mutation Hooks (State machine transitions, planned date additions & delay calculations)
       if (table === 'indent') {
@@ -941,6 +965,14 @@ export class GenericController {
         if (existing) {
           const delays = DelayCalculatorService.calculateIssueDelays({ ...existing, ...data }, tx);
           Object.assign(data, delays);
+          const merged = { ...existing, ...data };
+          if (existing.issue_kind === 'MAINTENANCE' && StoreDieselService.isApproved(merged.status)) {
+            const isGivenChanging = data.given_qty !== undefined && data.given_qty !== existing.given_qty;
+            const isStatusChanging = data.status !== undefined && data.status !== existing.status;
+            if (isGivenChanging || isStatusChanging) {
+              await StoreMaintenanceService.assertApprovalFor(tx, merged, Number(String(merged.given_qty ?? 0)) || 0);
+            }
+          }
         }
       }
 
@@ -975,6 +1007,10 @@ export class GenericController {
           await inventoryService.syncInventoryItemAggregations(updatedRecord.product_name, tx);
         }
         await pcReportService.recalculateStageKpis('Issue Data', tx);
+        if (updatedRecord?.issue_kind === 'ASSET_DIESEL') {
+          await StoreDieselService.reconcile(tx, updatedRecord.id, currentUserContext(req as AuthenticatedRequest).userId);
+        }
+        if (updatedRecord?.issue_kind === 'MAINTENANCE') await StoreMaintenanceService.reconcile(tx, updatedRecord.id);
       } else if (table === 'tally_entry') {
         await pcReportService.recalculateStageKpis('Audit Data', tx);
         await pcReportService.recalculateStageKpis('Rectify the mistake', tx);
@@ -1001,18 +1037,69 @@ export class GenericController {
     const { where = {}, data = {} } = req.body;
 
     const normalizedData = normalizeBody(table, data);
+    if (table === 'issue') IssueKindService.assertNoKindChange(normalizedData); // store_issue_kind_v1
     const normalizedWhere = parseWhereFilters(table, where);
+
+    // P0.4: a bulk update (issue approval, receiving, lifting, stage updates, item rename) used to skip the stock hooks, so the stored
+    // inventory totals went stale. Re-sync the stock of every item the update touches, plus the pending lift of the indents involved.
+    const STOCK_TABLES = ['issue', 'store_in', 'store_in_direct', 'indent'];
+    const stockTable = STOCK_TABLES.includes(table);
+    const inventoryService = new InventoryStockService();
 
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const model = getPrismaModel(table, tx);
-      return await model.updateMany({
+      const touched = stockTable
+        ? await model.findMany({
+            where: normalizedWhere,
+            select: {
+              product_name: true,
+              ...(table === 'store_in' ? { indent_no: true } : {}),
+              ...(table === 'issue' ? { id: true, issue_kind: true, firm_id: true, group_head: true, given_qty: true, status: true, requirement_id: true } : {}),
+            },
+          })
+        : [];
+
+      // Phase 2: approving a diesel issue (a bulk update of status / given_qty) must not give out more than the project's Store holds
+      const dieselRows = table === 'issue' ? touched.filter((r: any) => r.issue_kind === 'ASSET_DIESEL') : [];
+      if (dieselRows.length > 0 && StoreDieselService.isApproved(normalizedData.status)) {
+        for (const r of dieselRows) await StoreDieselService.assertStockFor(tx, r, Number(String(normalizedData.given_qty ?? r.given_qty ?? 0)) || 0);
+      }
+
+      const maintenanceRows = table === 'issue' ? touched.filter((r: any) => r.issue_kind === 'MAINTENANCE') : [];
+      if (maintenanceRows.length > 0 && StoreDieselService.isApproved(normalizedData.status)) {
+        for (const r of maintenanceRows) await StoreMaintenanceService.assertApprovalFor(tx, r, Number(String(normalizedData.given_qty ?? r.given_qty ?? 0)) || 0);
+      }
+
+      const updated = await model.updateMany({
         where: normalizedWhere,
         data: normalizedData,
       });
+
+      // ... and the machine's diesel log follows the approval (created, changed or voided)
+      if (dieselRows.length > 0 && updated.count > 0) {
+        await StoreDieselService.reconcileMany(tx, dieselRows.map((r: any) => r.id), currentUserContext(req as AuthenticatedRequest).userId);
+      }
+
+      // ... and so does the work order's part (issued, changed or taken back)
+      if (maintenanceRows.length > 0 && updated.count > 0) {
+        await StoreMaintenanceService.reconcileMany(tx, maintenanceRows.map((r: any) => r.id));
+      }
+
+      if (stockTable && updated.count > 0) {
+        const names = new Set<string>(touched.map((r: any) => r.product_name).filter(Boolean));
+        if (typeof normalizedData.product_name === 'string' && normalizedData.product_name.trim()) names.add(normalizedData.product_name);
+        for (const name of names) await inventoryService.syncInventoryItemAggregations(name, tx);
+        if (table === 'store_in') {
+          const indents = new Set<string>(touched.map((r: any) => r.indent_no).filter(Boolean));
+          for (const no of indents) await inventoryService.calculatePendingLiftQty(no, tx);
+        }
+      }
+      return updated;
     });
 
     // Invalidate cached query results for the mutated table and dependencies
     invalidateTableCache(table);
+    if (stockTable) invalidateTableCache('inventory');
 
     res.json({
       success: true,
@@ -1058,6 +1145,12 @@ export class GenericController {
             },
           });
         }
+      }
+
+      // a deleted Store diesel issue takes its machine diesel log with it (voided, history kept)
+      if (table === 'issue') {
+        await StoreDieselService.voidForIssue(tx, numericId, currentUserContext(req as AuthenticatedRequest).userId, 'Store issue deleted');
+        await StoreMaintenanceService.voidForIssue(tx, numericId, 'Store issue deleted');
       }
 
       await model.delete({

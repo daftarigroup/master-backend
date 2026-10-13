@@ -105,6 +105,20 @@ model Department {
 }
 
 model Firm {
+  // fleet_v2_cost back-relations
+  fleetSettings      FleetSettings?
+  wbsActivities      WbsActivity[]
+  machineRates       MachineRate[]
+  machineCostEntries MachineCostEntry[]
+  workTypes          WorkType[]               // fleet_v3_ops
+  checklistTemplates ChecklistTemplate[]
+  serviceSchedules   MachineServiceSchedule[]
+  machineDocuments   MachineDocument[]
+  documentTypes      DocumentType[]
+  machineAssignments MachineAssignment[]
+  transfersFrom      MachineTransfer[]        @relation("TransferFromFirm")
+  transfersTo        MachineTransfer[]        @relation("TransferToFirm")
+
   id                           BigInt                @id @default(autoincrement())
   company_id                   BigInt?
   firm_name                    String                @db.Text
@@ -157,7 +171,10 @@ model Firm {
   repair_indents          RepairIndent[]
   technicians             Technician[]
   amc_contracts           AMCContract[]
-  document_sequences      DocumentSequence[]
+
+  dieselReceipts   DieselReceipt[]
+  dieselLogs       DieselLog[]
+  machineUsageLogs MachineUsageLog[]
 
   @@map("firm")
 }
@@ -324,6 +341,17 @@ model Indent {
   firm_id                  BigInt?
   firm                     Firm?     @relation(fields: [firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1: link to the item master; product_name stays as display text
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  // fleet_v7_repair_parts: raised from a repair work order's part list
+  work_order_id String?
+  wo_part_id    String?
+  work_order    MaintenanceWorkOrder?     @relation("IndentWorkOrder", fields: [work_order_id], references: [id], onDelete: SetNull)
+  wo_part       WorkOrderPartRequirement? @relation("IndentPartRequirement", fields: [wo_part_id], references: [id], onDelete: SetNull)
+
+  @@index([firm_id, item_id], map: "indent_firm_item_idx")
+  @@index([work_order_id], map: "indent_work_order_idx")
   @@map("indent")
 }
 
@@ -351,6 +379,10 @@ model Inventory {
   firm_id           BigInt?
   firm              Firm?    @relation(fields: [firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  @@index([firm_id, item_id], map: "inventory_firm_item_idx")
   @@map("inventory")
 }
 
@@ -381,6 +413,27 @@ model Issue {
   firm_id             BigInt?
   firm                Firm?     @relation(fields: [firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  // store_issue_kind_v1: MATERIAL (contractor / site, as always) | MAINTENANCE (parts to a machine) | ASSET_DIESEL (diesel to a machine)
+  issue_kind    String     @default("MATERIAL")
+  machine_id    String?
+  work_order_id String?
+  meter_reading Decimal?   @db.Decimal(14, 2)
+  machine       Machine?   @relation("StoreIssueMachine", fields: [machine_id], references: [id], onDelete: Restrict)
+  work_order    MaintenanceWorkOrder? @relation("StoreIssueWorkOrder", fields: [work_order_id], references: [id], onDelete: SetNull)
+  dieselLogs    DieselLog[]           @relation("StoreIssueDieselLog") // fleet_v6_store_diesel
+
+  // fleet_v7_repair_parts: the work order part line this issue is against
+  requirement_id String?
+  requirement    WorkOrderPartRequirement? @relation("IssuePartRequirement", fields: [requirement_id], references: [id], onDelete: SetNull)
+  partIssues     WorkOrderPartIssue[]      @relation("StoreIssuePartIssue")
+
+  @@index([firm_id, item_id], map: "issue_firm_item_idx")
+  @@index([requirement_id], map: "issue_requirement_idx")
+  @@index([issue_kind], map: "issue_kind_idx")
+  @@index([machine_id], map: "issue_machine_idx")
   @@map("issue")
 }
 
@@ -396,6 +449,16 @@ model Item {
   group_head                GroupHead? @relation(fields: [group_head_id], references: [id])
   uom                       Uom?       @relation(fields: [uom_id], references: [id])
   firm                      Firm?      @relation(fields: [firm_id], references: [id])
+
+  // store_item_ref_v1 back-relations
+  indents         Indent[]
+  inventoryRows   Inventory[]
+  issues          Issue[]
+  partRequirements WorkOrderPartRequirement[] @relation("PartRequirementItem")
+  poLines         PoMaster[]
+  stockTransfers  StockTransfers[]
+  storeInRows     StoreIn[]
+  storeInDirects  StoreInDirect[]
 
   @@map("item")
 }
@@ -584,6 +647,10 @@ model PoMaster {
   firm_id                 BigInt?
   firm                    Firm?    @relation(fields: [firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  @@index([firm_id, item_id], map: "po_master_firm_item_idx")
   @@map("po_master")
 }
 
@@ -649,12 +716,19 @@ model SiteEngineerDetails {
 }
 
 model SiteLocationDetails {
+  wbsActivities WbsActivity[] // fleet_v2_cost
+
   id         BigInt    @id @default(autoincrement())
   created_at DateTime? @default(now()) @db.Timestamptz()
   location   String    @db.Text
   firm_id    BigInt?
   firm_name  String?   @db.Text
   firm       Firm?     @relation(fields: [firm_id], references: [id])
+
+  machines       Machine[]
+  dieselReceipts DieselReceipt[]
+  dieselLogs     DieselLog[]
+  assignments    MachineAssignment[] // fleet_v3_ops
 
   @@map("site_location_details")
 }
@@ -697,6 +771,10 @@ model StockTransfers {
   from_firm    Firm?     @relation("from_firm_id", fields: [from_firm_id], references: [id])
   to_firm      Firm?     @relation("to_firm_id", fields: [to_firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  @@index([item_id], map: "stock_transfers_item_idx")
   @@map("stock_transfers")
 }
 
@@ -778,6 +856,10 @@ model StoreIn {
   firm_id                    BigInt?
   firm                       Firm?     @relation(fields: [firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  @@index([firm_id, item_id], map: "store_in_firm_item_idx")
   @@map("store_in")
 }
 
@@ -808,6 +890,10 @@ model StoreInDirect {
   firm_name              String?   @db.Text
   firm                   Firm?     @relation(fields: [firm_id], references: [id])
 
+  item_id BigInt? // store_item_ref_v1
+  item    Item?   @relation(fields: [item_id], references: [id])
+
+  @@index([firm_id, item_id], map: "store_in_direct_firm_item_idx")
   @@map("store_in_direct")
 }
 
@@ -893,6 +979,12 @@ model Uom {
 }
 
 model User {
+  // fleet_v2_cost back-relations
+  fleetSettingsUpdated FleetSettings[]    @relation("FleetSettingsUpdatedBy")
+  machineRatesCreated  MachineRate[]      @relation("MachineRateCreatedBy")
+  costEntriesCreated   MachineCostEntry[] @relation("CostEntryCreatedBy")
+  costEntriesVoided    MachineCostEntry[] @relation("CostEntryVoidedBy")
+
   id                                        BigInt     @id @default(autoincrement())
   timestamp                                 DateTime   @default(now()) @db.Timestamptz()
   user_name                                 String?    @db.Text
@@ -959,6 +1051,34 @@ model User {
   breakdown_reports_assigned  BreakdownReport[]          @relation("BreakdownAssignedTo")
   repair_indents_done         RepairIndent[]             @relation("IndentDoer")
   repair_receivings_inspected RepairReceiving[]          @relation("ReceivingInspectedBy")
+
+  dieselReceiptsCreated DieselReceipt[]         @relation("DieselReceiptCreatedBy")
+  dieselReceiptsVoided  DieselReceipt[]         @relation("DieselReceiptVoidedBy")
+  usageLogsOperated     MachineUsageLog[]       @relation("UsageLogOperator")
+  usageLogsCreated      MachineUsageLog[]       @relation("UsageLogCreatedBy")
+  usageLogsVoided       MachineUsageLog[]       @relation("UsageLogVoidedBy")
+  usageLogsApproved     MachineUsageLog[]       @relation("UsageLogApprovedBy")
+  workLogStatusActed    WorkLogStatusLog[]      @relation("WorkLogStatusActor")
+  machinesDefaultMechanic    Machine[]          @relation("MachineDefaultMechanic")
+  machinesDefaultResponsible Machine[]          @relation("MachineDefaultResponsible")
+  serviceSchedulesCreated MachineServiceSchedule[] @relation("ServiceScheduleCreatedBy")
+  checklistItemsDone    WorkOrderChecklistItem[] @relation("ChecklistItemDoneBy")
+  workOrdersResponsible MaintenanceWorkOrder[]  @relation("WorkOrderResponsible")
+  documentsCreated      MachineDocument[]       @relation("MachineDocCreatedBy")
+  documentsVoided       MachineDocument[]       @relation("MachineDocVoidedBy")
+  documentsOwned        MachineDocument[]       @relation("MachineDocOwner")
+  documentEvents        MachineDocumentEvent[]  @relation("DocEventActor")
+  assignmentsResponsible MachineAssignment[]    @relation("AssignmentResponsible")
+  assignmentsCreated    MachineAssignment[]     @relation("AssignmentCreatedBy")
+  operatorAssignments   MachineOperatorAssignment[] @relation("OperatorAssignmentUser")
+  operatorAssignmentsCreated MachineOperatorAssignment[] @relation("OperatorAssignmentCreatedBy")
+  transfersRequested    MachineTransfer[]       @relation("TransferRequestedBy")
+  transfersApproved     MachineTransfer[]       @relation("TransferApprovedBy")
+  transfersReceived     MachineTransfer[]       @relation("TransferReceivedBy")
+  transferEventsActed   MachineTransferEvent[]  @relation("TransferEventActor")
+  dieselLogsCreated     DieselLog[]             @relation("DieselLogCreatedBy")
+  dieselLogsVoided      DieselLog[]             @relation("DieselLogVoidedBy")
+  workOrdersRequested   MaintenanceWorkOrder[]  @relation("WorkOrderRequestedBy")
 
   @@map("user")
 }
@@ -2217,6 +2337,10 @@ model Asset {
   repairIndents RepairIndent[]
   amcContracts  AMCContract[]
 
+  ownershipType OwnershipType @default(OWNED)
+
+  @@index([firmId, ownershipType])
+
   @@index([firmId])
   @@index([status])
   @@map("assets")
@@ -2266,8 +2390,44 @@ model Machine {
   repairIndents    RepairIndent[]
   amcContracts     AMCContract[]
 
+  ownershipType       OwnershipType @default(OWNED)
+  equipmentType       EquipmentType @default(OTHER)
+  readingUnit         ReadingUnit   @default(HOURS)
+  openingReading      Decimal       @default(0) @db.Decimal(12, 2)
+  expectedConsumption Decimal?      @db.Decimal(8, 3)
+  maxUsagePerEntry    Decimal?      @db.Decimal(10, 2)
+  registrationNo      String?
+  siteLocationId      BigInt?
+  rentalStartAt       DateTime?     @db.Timestamptz(3)
+  rentalEndAt         DateTime?     @db.Timestamptz(3)
+  rentalVendorId      String?
+  rentalVendorName    String?
+  hireType            HireType?
+  shiftHoursPerDay    Decimal?      @db.Decimal(4, 2) // per-machine override of the firm standard shift
+
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  rentalVendor RepairVendor?        @relation("MachineRentalVendor", fields: [rentalVendorId], references: [id])
+  usageLogs    MachineUsageLog[]
+  defaultMechanicId    BigInt?  // fleet_v3_ops
+  defaultResponsibleId BigInt?
+  capacityLabel        String?
+  defaultMechanic      User? @relation("MachineDefaultMechanic", fields: [defaultMechanicId], references: [id])
+  defaultResponsible   User? @relation("MachineDefaultResponsible", fields: [defaultResponsibleId], references: [id])
+  serviceSchedules     MachineServiceSchedule[]
+  documents            MachineDocument[]
+  assignments          MachineAssignment[]
+  operatorAssignments  MachineOperatorAssignment[]
+  transfers            MachineTransfer[]
+  dieselLogs   DieselLog[]
+  rates        MachineRate[]
+  costEntries  MachineCostEntry[]
+
+  @@index([firmId, ownershipType])
+
   @@index([firmId])
   @@index([status])
+  storeIssues Issue[] @relation("StoreIssueMachine") // store_issue_kind_v1
+
   @@map("machines")
 }
 
@@ -2286,6 +2446,7 @@ model MachinePart {
   maintenancePlans MaintenancePlan[]
   workOrders       MaintenanceWorkOrder[]
   repairIndents    RepairIndent[]
+  repairParts      WorkOrderRepairPart[]
 
   @@index([machineId])
   @@map("machine_parts")
@@ -2301,6 +2462,8 @@ model ActivityType {
 
   firm  Firm?             @relation(fields: [firmId], references: [id])
   plans MaintenancePlan[]
+
+  workOrders MaintenanceWorkOrder[]
 
   @@index([firmId])
   @@map("activity_types")
@@ -2391,9 +2554,54 @@ model MaintenanceWorkOrder {
   statusLogs       WorkOrderStatusLog[]
   repairIndents    RepairIndent[]
 
+  title           String?
+  description     String?
+  activityTypeId  String?
+  documentUrl     String?
+  requestedById   BigInt?
+  outsourceStatus OutsourceStatus?
+  vendorId        String?
+  sentAt          DateTime?        @db.Timestamptz(3)
+  receivedAt      DateTime?        @db.Timestamptz(3)
+  paidAt          DateTime?        @db.Timestamptz(3)
+  billNo          String?
+  rollupAppliedAt DateTime?        @db.Timestamptz(3)
+
+  // fleet_v3_ops: task assignment, service link, estimate / actual split. `cost` stays the single actual total.
+  responsibleId    BigInt?
+  serviceMode      ServiceMode @default(IN_HOUSE)
+  scheduleId       String?
+  readingAtService Decimal?    @db.Decimal(12, 2)
+  estPartsCost     Decimal?    @db.Decimal(14, 2)
+  estLabourCost    Decimal?    @db.Decimal(14, 2)
+  actualPartsCost  Decimal?    @db.Decimal(14, 2)
+  actualLabourCost Decimal?    @db.Decimal(14, 2)
+
+  responsible User?                   @relation("WorkOrderResponsible", fields: [responsibleId], references: [id])
+  schedule    MachineServiceSchedule? @relation(fields: [scheduleId], references: [id])
+  documents   MachineDocument[]
+
+  activityType ActivityType? @relation(fields: [activityTypeId], references: [id])
+  requestedBy  User?         @relation("WorkOrderRequestedBy", fields: [requestedById], references: [id])
+  vendor       RepairVendor? @relation("WorkOrderVendor", fields: [vendorId], references: [id])
+
+  @@index([outsourceStatus])
+  @@index([responsibleId])
+  @@index([scheduleId])
+  @@index([machineId, completedAt])
+  @@index([firmId, completedAt])
+
   @@index([machineId])
   @@index([firmId])
   @@index([status])
+  storeIssues Issue[] @relation("StoreIssueWorkOrder") // store_issue_kind_v1
+
+  // fleet_v7_repair_parts: NULL = not decided (old orders), true / false = in-house "material required?" answer
+  materialRequired Boolean?
+  partRequirements WorkOrderPartRequirement[]
+  partIssues       WorkOrderPartIssue[]
+  indents          Indent[] @relation("IndentWorkOrder")
+
   @@map("maintenance_work_orders")
 }
 
@@ -2404,8 +2612,15 @@ model WorkOrderChecklistItem {
   text        String
   done        Boolean @default(false)
   sortOrder   Int     @default(0)
+  // fleet_v3_ops: Done / Pending / Issue with who and when. `done` is kept in sync (done = state is DONE).
+  state    ChecklistState @default(PENDING)
+  note     String?
+  doneById BigInt?
+  doneAt   DateTime?      @db.Timestamptz(3)
+  photoUrl String?
 
   workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  doneBy    User?                @relation("ChecklistItemDoneBy", fields: [doneById], references: [id])
 
   @@index([workOrderId])
   @@map("work_order_checklist_items")
@@ -2435,11 +2650,64 @@ model WorkOrderRepairPart {
   vendorName       String?
   warrantyFromDate DateTime?
   warrantyToDate   DateTime?
+  unitCost         Decimal?  @db.Decimal(12, 2) // fleet_v3_ops
+  machinePartId    String?
 
-  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  workOrder   MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  machinePart MachinePart?         @relation(fields: [machinePartId], references: [id])
 
   @@index([workOrderId])
   @@map("work_order_repair_parts")
+}
+
+// fleet_v7_repair_parts: a part (Store item) an in-house repair needs. Issued quantity is derived from live WorkOrderPartIssue rows.
+model WorkOrderPartRequirement {
+  id           String    @id @default(cuid())
+  workOrderId  String
+  firmId       BigInt?
+  itemId       BigInt?
+  itemName     String
+  groupHead    String
+  uom          String?
+  quantity     Decimal   @db.Decimal(12, 3)
+  note         String?
+  indentNumber String?
+  status       String    @default("OPEN") // OPEN | CANCELLED
+  createdById  BigInt?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  cancelledAt  DateTime? @db.Timestamptz(3)
+  cancelReason String?
+
+  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  item      Item?                @relation("PartRequirementItem", fields: [itemId], references: [id], onDelete: SetNull)
+  issues    WorkOrderPartIssue[]
+  indents   Indent[]             @relation("IndentPartRequirement")
+  storeIssues Issue[]            @relation("IssuePartRequirement")
+
+  @@index([workOrderId], map: "work_order_part_requirements_wo_idx")
+  @@map("work_order_part_requirements")
+}
+
+// fleet_v7_repair_parts: one live row per approved Store issue (void on reset / reject / delete).
+model WorkOrderPartIssue {
+  id            String    @id @default(cuid())
+  requirementId String
+  workOrderId   String
+  storeIssueId  BigInt?
+  quantity      Decimal   @db.Decimal(12, 3)
+  unitCost      Decimal?  @db.Decimal(14, 4)
+  amount        Decimal?  @db.Decimal(14, 2)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  voidedAt      DateTime? @db.Timestamptz(3)
+  voidReason    String?
+
+  requirement WorkOrderPartRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  workOrder   MaintenanceWorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  storeIssue  Issue?                   @relation("StoreIssuePartIssue", fields: [storeIssueId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId], map: "work_order_part_issues_wo_idx")
+  @@index([requirementId], map: "work_order_part_issues_req_idx")
+  @@map("work_order_part_issues")
 }
 
 model WorkOrderApprovalRequest {
@@ -2573,6 +2841,9 @@ model RepairVendor {
   repairIndents RepairIndent[]
   offers        RepairVendorOffer[]
   amcContracts  AMCContract[]
+
+  rentedMachines       Machine[]              @relation("MachineRentalVendor")
+  outsourcedWorkOrders MaintenanceWorkOrder[] @relation("WorkOrderVendor")
 
   @@index([firmId])
   @@map("repair_vendors")
@@ -2818,13 +3089,740 @@ model AMCContract {
 // lastValue inside a transaction per code generation.
 model DocumentSequence {
   id        String  @id @default(cuid())
+  // 0 is the "no firm" sentinel (see services/documentSequence.service.ts), so this column is deliberately NOT a
+  // foreign key to Firm: no firm has id 0, and a declared FK made every firm-less code (SN, PLN, WO, BD, REP, AMC)
+  // fail on any database built from this schema. Existing databases never had the constraint.
   firmId    BigInt?
   prefix    String
   year      Int
   lastValue Int     @default(0)
 
-  firm Firm? @relation(fields: [firmId], references: [id])
-
   @@unique([firmId, prefix, year])
   @@map("document_sequences")
+}
+
+// ===================== FLEET: OWNERSHIP, DIESEL LEDGER, USAGE LOGBOOK (fleet_v1) =====================
+// Design: md/FLEET_DIESEL_AND_MAINTENANCE_MERGE_PLAN.md. Partial unique indexes and CHECK constraints
+// live only in the SQL migration (Prisma cannot express them): one OPENING receipt per firm,
+// one OPEN usage entry per machine, litres > 0, stop >= start, usage null <=> stop null.
+
+enum OwnershipType {
+  OWNED
+  RENTED
+}
+
+enum ReadingUnit {
+  KM
+  HOURS
+  NONE
+}
+
+enum HireType {
+  DRY
+  WET
+}
+
+enum EquipmentType {
+  EXCAVATOR
+  BACKHOE_LOADER
+  TIPPER
+  TRUCK
+  TRANSIT_MIXER
+  ROLLER
+  TRACTOR
+  WATER_PUMP
+  DG_SET
+  CAR
+  OTHER
+  LOADER
+  DOZER
+  GRADER
+  CRANE
+  CONCRETE_PUMP
+  BATCHING_PLANT
+  COMPRESSOR
+  WATER_TANKER
+}
+
+enum DieselReceiptKind {
+  RECEIPT
+  OPENING
+  ADJUSTMENT
+}
+
+enum DieselReceiptSource {
+  MANUAL
+  STORE_ISSUE
+  STORE_IN
+}
+
+enum DieselLogSource {
+  MANUAL
+  STORE_ISSUE
+}
+
+enum OutsourceStatus {
+  TO_SEND
+  SENT
+  RECEIVED
+  PAID
+}
+
+// Diesel coming INTO a firm's site stock ("QTY RECEIVED", opening balance, corrections).
+model DieselReceipt {
+  id             String              @id @default(cuid())
+  firmId         BigInt
+  siteLocationId BigInt?
+  kind           DieselReceiptKind   @default(RECEIPT)
+  receivedAt     DateTime            @db.Timestamptz(3)
+  receiptDate    DateTime            @db.Date // IST calendar day, for grouping
+  litres         Decimal             @db.Decimal(10, 2) // > 0, except ADJUSTMENT
+  issuerName     String?
+  source         DieselReceiptSource @default(MANUAL)
+  externalRef    String?             @unique
+  supplierName   String?
+  reference      String?
+  note           String?
+  ratePerLitre   Decimal?            @db.Decimal(10, 4) // purchase price; both null = unpriced
+  totalAmount    Decimal?            @db.Decimal(14, 2)
+  createdById    BigInt
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  voidedAt       DateTime?           @db.Timestamptz(3)
+  voidedById     BigInt?
+  voidReason     String?
+
+  firm         Firm                 @relation(fields: [firmId], references: [id])
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  createdBy    User                 @relation("DieselReceiptCreatedBy", fields: [createdById], references: [id])
+  voidedBy     User?                @relation("DieselReceiptVoidedBy", fields: [voidedById], references: [id])
+
+  @@index([firmId, receiptDate])
+  @@map("diesel_receipts")
+}
+
+// Diesel issued OUT to a machine, or to a free-text consumer ("other diesel").
+model DieselLog {
+  id             String          @id @default(cuid())
+  firmId         BigInt
+  siteLocationId BigInt?
+  machineId      String?
+  consumerLabel  String?
+  usageLogId     String?
+  issuedAt       DateTime        @db.Timestamptz(3)
+  issueDate      DateTime        @db.Date
+  litres         Decimal         @db.Decimal(10, 2)
+  source         DieselLogSource @default(MANUAL)
+  externalRef    String?         @unique // Store issue id later; idempotency key for recordIssue()
+  wbsActivityId  String?
+  // valuation stamped when the issue is written; all three null = not priced yet
+  ratePerLitre   Decimal?        @db.Decimal(10, 4)
+  amount         Decimal?        @db.Decimal(14, 2)
+  rateSource     DieselRateSource?
+  note           String?
+  createdById    BigInt
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  voidedAt       DateTime?       @db.Timestamptz(3)
+  voidedById     BigInt?
+  voidReason     String?
+  // fleet_v6_store_diesel: fed by an approved Store issue (source STORE_ISSUE)
+  meterReading   Decimal?        @db.Decimal(14, 2)
+  storeIssueId   BigInt?
+  flags          String[]        @default([]) // review flags: READING_BELOW_LAST, READING_JUMP (saved, not blocked)
+
+  firm         Firm                 @relation(fields: [firmId], references: [id])
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  storeIssue   Issue?               @relation("StoreIssueDieselLog", fields: [storeIssueId], references: [id], onDelete: SetNull)
+  machine      Machine?             @relation(fields: [machineId], references: [id], onDelete: Restrict) // a machine with diesel history cannot be deleted
+  usageLog     MachineUsageLog?     @relation(fields: [usageLogId], references: [id])
+  wbsActivity  WbsActivity?         @relation(fields: [wbsActivityId], references: [id])
+  createdBy    User                 @relation("DieselLogCreatedBy", fields: [createdById], references: [id])
+  voidedBy     User?                @relation("DieselLogVoidedBy", fields: [voidedById], references: [id])
+
+  @@index([firmId, issueDate])
+  @@index([machineId, issueDate])
+  @@map("diesel_logs")
+}
+
+// Meter-based usage: start/stop readings per entry. Replaces DailyMachineLog.
+model MachineUsageLog {
+  id               String    @id @default(cuid())
+  firmId           BigInt
+  machineId        String
+  logDate          DateTime  @db.Date
+  startedAt        DateTime  @db.Timestamptz(3)
+  stoppedAt        DateTime? @db.Timestamptz(3)
+  startReading     Decimal   @db.Decimal(12, 2)
+  stopReading      Decimal?  @db.Decimal(12, 2) // null = OPEN entry
+  usage            Decimal?  @db.Decimal(12, 2) // written by the service only; null while open
+  meterReset       Boolean   @default(false)
+  meterResetReason String?
+  continuityGap    Decimal?  @db.Decimal(12, 2)
+  continuityReason String?
+  isFlagged        Boolean   @default(false)
+  flagReasons      String[]  @default([])
+  operatorId       BigInt?
+  remarks          String?
+  createdById      BigInt
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  voidedAt         DateTime? @db.Timestamptz(3)
+  voidedById       BigInt?
+  voidReason       String?
+  wbsActivityId    String?
+  // fleet_v3_ops: a work log is this row. History is APPROVED; new entries start PENDING.
+  logNumber       String?
+  shift           WorkShift     @default(DAY)
+  workTypeId      String?
+  locationText    String?
+  outputQty       Decimal?      @db.Decimal(14, 3)
+  outputUnit      String?
+  trips           Int?
+  status          WorkLogStatus @default(PENDING)
+  approvedById    BigInt?
+  approvedAt      DateTime?     @db.Timestamptz(3)
+  rejectReason    String?
+  clientRequestId String?
+
+  workType   WorkType?   @relation(fields: [workTypeId], references: [id])
+  approvedBy User?       @relation("UsageLogApprovedBy", fields: [approvedById], references: [id])
+  statusLogs WorkLogStatusLog[]
+
+  firm       Firm        @relation(fields: [firmId], references: [id])
+  machine    Machine     @relation(fields: [machineId], references: [id])
+  wbsActivity WbsActivity? @relation(fields: [wbsActivityId], references: [id])
+  operator   User?       @relation("UsageLogOperator", fields: [operatorId], references: [id])
+  createdBy  User        @relation("UsageLogCreatedBy", fields: [createdById], references: [id])
+  voidedBy   User?       @relation("UsageLogVoidedBy", fields: [voidedById], references: [id])
+  dieselLogs DieselLog[]
+
+  @@index([machineId, startedAt])
+  @@index([firmId, logDate])
+  @@index([firmId, status, logDate])
+  @@map("machine_usage_logs")
+}
+
+// ---------------------------------------------------------------------------
+// fleet_v2_cost: equipment cost tracking. SQL: prisma/pending/fleet_v2_cost/migration.sql
+// CHECK constraints and partial indexes exist only in SQL (see that file): amounts >= 0, effectiveTo >= effectiveFrom,
+// diesel rate/amount/source all-or-none, and the partial cost indexes on usage, diesel and cost entries.
+// ---------------------------------------------------------------------------
+enum MachineRateType {
+  INTERNAL_HOURLY
+  RENTAL
+}
+
+enum RateBasis {
+  HOUR
+  DAY
+  MONTH
+  KM
+}
+
+enum CostEntryCategory {
+  OPERATOR
+  TRANSPORT
+  INSURANCE
+  CONSUMABLES
+  RENTAL_INVOICE
+  OTHER
+}
+
+enum DieselRateSource {
+  RECEIPT_AVG
+  STORE
+  DEFAULT
+  MANUAL
+}
+
+enum WbsStatus {
+  ACTIVE
+  CLOSED
+}
+
+// One row per firm: shift length, idle threshold, default diesel price, working weekdays (ISO, 1 = Monday).
+model FleetSettings {
+  firmId              BigInt   @id
+  standardHoursPerDay Decimal  @default(8) @db.Decimal(4, 2)
+  idleAfterDays       Int      @default(2)
+  defaultDieselRate   Decimal? @db.Decimal(10, 4)
+  workingDays         Int[]    @default([1, 2, 3, 4, 5, 6])
+  // fleet_v3_ops
+  dayShiftStartMin            Int     @default(360)
+  dayShiftEndMin              Int     @default(1080)
+  blockWorkWhenServiceOverdue Boolean @default(false)
+  countPendingLogsInTotals    Boolean @default(true)
+  serviceLeadPercent          Int     @default(10)
+  serviceLeadDays             Int     @default(7)
+  documentExpiryWindowDays    Int     @default(30) // fleet_v4_documents
+  updatedAt           DateTime @updatedAt @db.Timestamptz(3)
+  updatedById         BigInt?
+
+  firm      Firm  @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  updatedBy User? @relation("FleetSettingsUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("fleet_settings")
+}
+
+// Work-breakdown activity that usage, diesel and cost entries are booked against.
+model WbsActivity {
+  id             String    @id @default(cuid())
+  firmId         BigInt
+  code           String
+  name           String
+  parentId       String?
+  status         WbsStatus @default(ACTIVE)
+  siteLocationId BigInt?
+  defaultWorkTypeId String? // fleet_v3_ops
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  defaultWorkType WorkType? @relation("WbsDefaultWorkType", fields: [defaultWorkTypeId], references: [id])
+  firm         Firm                 @relation(fields: [firmId], references: [id])
+  parent       WbsActivity?         @relation("WbsTree", fields: [parentId], references: [id])
+  children     WbsActivity[]        @relation("WbsTree")
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  usageLogs    MachineUsageLog[]
+  dieselLogs   DieselLog[]
+  costEntries  MachineCostEntry[]
+
+  @@unique([firmId, code])
+  @@index([firmId, status])
+  @@map("wbs_activities")
+}
+
+// Effective-dated rate card. Append-only: a change adds a row with a later effectiveFrom and closes the previous one.
+model MachineRate {
+  id                  String          @id @default(cuid())
+  firmId              BigInt
+  machineId           String
+  rateType            MachineRateType
+  basis               RateBasis
+  amount              Decimal         @db.Decimal(12, 4)
+  minBillableQty      Decimal?        @db.Decimal(12, 2)
+  extraRate           Decimal?        @db.Decimal(12, 4)
+  deductBreakdownDays Boolean         @default(false)
+  effectiveFrom       DateTime        @db.Date
+  effectiveTo         DateTime?       @db.Date
+  note                String?
+  createdById         BigInt
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+
+  firm      Firm    @relation(fields: [firmId], references: [id])
+  machine   Machine @relation(fields: [machineId], references: [id])
+  createdBy User    @relation("MachineRateCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([machineId, rateType, effectiveFrom])
+  @@index([firmId, machineId])
+  @@map("machine_rates")
+}
+
+// Manual costs booked to a machine (operator, transport, insurance, consumables, rental invoices, other).
+model MachineCostEntry {
+  id            String            @id @default(cuid())
+  firmId        BigInt
+  machineId     String
+  costDate      DateTime          @db.Date // IST calendar day
+  category      CostEntryCategory
+  amount        Decimal           @db.Decimal(14, 2)
+  wbsActivityId String?
+  description   String?
+  attachmentUrl String?
+  createdById   BigInt
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  voidedAt      DateTime?         @db.Timestamptz(3)
+  voidedById    BigInt?
+  voidReason    String?
+
+  firm        Firm         @relation(fields: [firmId], references: [id])
+  machine     Machine      @relation(fields: [machineId], references: [id])
+  wbsActivity WbsActivity? @relation(fields: [wbsActivityId], references: [id])
+  createdBy   User         @relation("CostEntryCreatedBy", fields: [createdById], references: [id])
+  voidedBy    User?        @relation("CostEntryVoidedBy", fields: [voidedById], references: [id])
+
+  @@index([firmId, machineId, costDate])
+  @@map("machine_cost_entries")
+}
+
+
+// ===================== FLEET v3: WORK LOGS, SERVICE, ASSIGNMENTS, TRANSFERS (fleet_v3_ops) =====================
+// SQL: prisma/pending/fleet_v3_ops/migration.sql. Check constraints and partial unique indexes exist only in SQL:
+//   machine_usage_logs: unique (firmId, clientRequestId) and (firmId, logNumber) where not null; CHECK reject needs a reason
+//   maintenance_work_orders: one OPEN work order per scheduleId (partial unique)
+//   machine_assignments: one ACTIVE (endedAt IS NULL) assignment per machine (partial unique)
+//   machine_operator_assignments: one current operator per machine and shift (partial unique)
+//   machine_transfers: one OPEN transfer per machine (partial unique); transferNumber unique
+
+enum WorkShift {
+  DAY
+  NIGHT
+  GENERAL
+}
+
+enum WorkLogStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ChecklistState {
+  PENDING
+  DONE
+  ISSUE
+}
+
+enum ServiceMode {
+  IN_HOUSE
+  VENDOR
+}
+
+enum MachineDocType {
+  RC_BOOK
+  INSURANCE
+  PUC
+  FITNESS
+  OPERATOR_LICENSE
+  SERVICE_REPORT
+  BILL
+  OTHER
+}
+
+enum TransferStatus {
+  REQUESTED
+  APPROVED
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model WorkLogStatusLog {
+  id         String         @id @default(cuid())
+  usageLogId String
+  fromStatus WorkLogStatus?
+  toStatus   WorkLogStatus
+  actorId    BigInt?
+  note       String?
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+
+  usageLog MachineUsageLog @relation(fields: [usageLogId], references: [id], onDelete: Cascade)
+  actor    User?           @relation("WorkLogStatusActor", fields: [actorId], references: [id])
+
+  @@index([usageLogId, createdAt])
+  @@map("work_log_status_logs")
+}
+
+model WorkType {
+  id        String   @id @default(cuid())
+  firmId    BigInt
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  firm          Firm              @relation(fields: [firmId], references: [id])
+  usageLogs     MachineUsageLog[]
+  wbsActivities WbsActivity[]     @relation("WbsDefaultWorkType")
+
+  @@unique([firmId, name])
+  @@map("work_types")
+}
+
+model ChecklistTemplate {
+  id        String   @id @default(cuid())
+  firmId    BigInt
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  firm      Firm                     @relation(fields: [firmId], references: [id])
+  items     ChecklistTemplateItem[]
+  schedules MachineServiceSchedule[]
+
+  @@unique([firmId, name])
+  @@map("checklist_templates")
+}
+
+model ChecklistTemplateItem {
+  id         String @id @default(cuid())
+  templateId String
+  text       String
+  sortOrder  Int    @default(0)
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("checklist_template_items")
+}
+
+model MachineServiceSchedule {
+  id                  String    @id @default(cuid())
+  firmId              BigInt
+  machineId           String
+  name                String
+  intervalValue       Decimal?  @db.Decimal(12, 2)
+  intervalDays        Int?
+  leadValue           Decimal?  @db.Decimal(12, 2)
+  leadDays            Int?
+  lastServiceAt       DateTime? @db.Date
+  lastServiceReading  Decimal?  @db.Decimal(12, 2)
+  checklistTemplateId String?
+  isActive            Boolean   @default(true)
+  createdById         BigInt?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  firm       Firm                   @relation(fields: [firmId], references: [id])
+  machine    Machine                @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  template   ChecklistTemplate?     @relation(fields: [checklistTemplateId], references: [id])
+  createdBy  User?                  @relation("ServiceScheduleCreatedBy", fields: [createdById], references: [id])
+  workOrders MaintenanceWorkOrder[]
+
+  @@index([machineId, isActive])
+  @@index([firmId, isActive])
+  @@map("machine_service_schedules")
+}
+
+model MachineDocument {
+  id               String         @id @default(cuid())
+  firmId           BigInt?
+  machineId        String?
+  workOrderId      String?
+  type             MachineDocType @default(OTHER) // deprecated by fleet_v4_documents: documentTypeId is the type
+  title            String
+  url              String? // deprecated: files live in machine_document_files
+  issuedAt         DateTime?      @db.Date
+  expiresAt        DateTime?      @db.Date // deprecated: validTill
+  createdById      BigInt?
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
+  voidedAt         DateTime?      @db.Timestamptz(3)
+  voidedById       BigInt?
+  voidReason       String?
+  // fleet_v4_documents
+  documentTypeId   String
+  ownerType        DocOwnerType   @default(MACHINE)
+  ownerUserId      BigInt?
+  documentNumber   String?
+  issuer           String?
+  validFrom        DateTime?      @db.Date
+  validTill        DateTime?      @db.Date
+  amount           Decimal?       @db.Decimal(14, 2)
+  remarks          String?
+  sourceType       DocSource      @default(UPLOAD)
+  sourceRef        String?
+  clientRequestId  String?
+  renewsDocumentId String?
+  updatedAt        DateTime       @default(now()) @updatedAt @db.Timestamptz(3)
+
+  firm          Firm?                  @relation(fields: [firmId], references: [id])
+  machine       Machine?               @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  workOrder     MaintenanceWorkOrder?  @relation(fields: [workOrderId], references: [id])
+  createdBy     User?                  @relation("MachineDocCreatedBy", fields: [createdById], references: [id])
+  voidedBy      User?                  @relation("MachineDocVoidedBy", fields: [voidedById], references: [id])
+  documentType  DocumentType           @relation(fields: [documentTypeId], references: [id])
+  ownerUser     User?                  @relation("MachineDocOwner", fields: [ownerUserId], references: [id])
+  renews        MachineDocument?       @relation("DocRenewal", fields: [renewsDocumentId], references: [id])
+  renewedBy     MachineDocument[]      @relation("DocRenewal")
+  files         MachineDocumentFile[]
+  events        MachineDocumentEvent[]
+
+  @@index([machineId, type])
+  @@map("machine_documents")
+}
+
+enum DocCategory {
+  COMPLIANCE
+  OPERATOR
+  PURCHASE
+  RENTAL
+  SERVICE
+  OTHER
+}
+
+enum DocValidity {
+  REQUIRED
+  OPTIONAL
+  NONE
+}
+
+enum DocApplies {
+  OWNED
+  RENTED
+  BOTH
+}
+
+enum DocOwnerType {
+  MACHINE
+  OPERATOR
+}
+
+enum DocSource {
+  UPLOAD
+  WORK_ORDER
+  MIGRATED
+}
+
+enum DocEvent {
+  CREATED
+  UPDATED
+  FILE_ADDED
+  FILE_REPLACED
+  VOIDED
+  DOWNLOADED
+}
+
+// fleet_v4_documents. The unique index on (COALESCE(firmId,0), code) and the partial indexes on machine_documents exist only in SQL.
+model DocumentType {
+  id                 String      @id @default(cuid())
+  firmId             BigInt?
+  code               String
+  name               String
+  category           DocCategory
+  hasValidity        DocValidity @default(NONE)
+  appliesTo          DocApplies  @default(BOTH)
+  machineCategories  String[]    @default([])
+  singleCurrent      Boolean     @default(false)
+  costSensitive      Boolean     @default(false)
+  personal           Boolean     @default(false)
+  allowMultipleFiles Boolean     @default(false)
+  expiryLeadDays     Int?
+  active             Boolean     @default(true)
+  sortOrder          Int         @default(0)
+  createdAt          DateTime    @default(now()) @db.Timestamptz(3)
+
+  firm      Firm?             @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  documents MachineDocument[]
+
+  @@map("document_types")
+}
+
+model MachineDocumentFile {
+  id           String   @id @default(cuid())
+  documentId   String
+  key          String
+  url          String
+  originalName String
+  mimeType     String?
+  sizeBytes    Int?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  document MachineDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, sortOrder])
+  @@index([key])
+  @@map("machine_document_files")
+}
+
+model MachineDocumentEvent {
+  id         String   @id @default(cuid())
+  documentId String
+  event      DocEvent
+  actorId    BigInt?
+  at         DateTime @default(now()) @db.Timestamptz(3)
+  meta       Json?
+
+  document MachineDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actor    User?           @relation("DocEventActor", fields: [actorId], references: [id])
+
+  @@index([documentId, at])
+  @@map("machine_document_events")
+}
+
+model MachineAssignment {
+  id                String    @id @default(cuid())
+  machineId         String
+  firmId            BigInt
+  siteLocationId    BigInt?
+  startedAt         DateTime  @default(now()) @db.Timestamptz(3)
+  expectedReturnAt  DateTime? @db.Date
+  endedAt           DateTime? @db.Timestamptz(3)
+  endReason         String?
+  responsibleUserId BigInt?
+  note              String?
+  createdById       BigInt?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+
+  machine      Machine              @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  firm         Firm                 @relation(fields: [firmId], references: [id])
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  responsible  User?                @relation("AssignmentResponsible", fields: [responsibleUserId], references: [id])
+  createdBy    User?                @relation("AssignmentCreatedBy", fields: [createdById], references: [id])
+  transfers    MachineTransfer[]
+
+  @@index([firmId, endedAt])
+  @@index([machineId, startedAt])
+  @@map("machine_assignments")
+}
+
+model MachineOperatorAssignment {
+  id          String     @id @default(cuid())
+  machineId   String
+  userId      BigInt
+  shift       WorkShift?
+  validFrom   DateTime   @default(dbgenerated("CURRENT_DATE")) @db.Date
+  validTill   DateTime?  @db.Date
+  endedAt     DateTime?  @db.Timestamptz(3)
+  createdById BigInt?
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+
+  machine   Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  user      User    @relation("OperatorAssignmentUser", fields: [userId], references: [id])
+  createdBy User?   @relation("OperatorAssignmentCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId, endedAt])
+  @@map("machine_operator_assignments")
+}
+
+model MachineTransfer {
+  id                 String         @id @default(cuid())
+  transferNumber     String         @unique
+  machineId          String
+  fromAssignmentId   String?
+  fromFirmId         BigInt
+  fromSiteLocationId BigInt?
+  toFirmId           BigInt
+  toSiteLocationId   BigInt?
+  status             TransferStatus @default(REQUESTED)
+  requestedById      BigInt?
+  approvedById       BigInt?
+  requestedAt        DateTime       @default(now()) @db.Timestamptz(3)
+  dispatchedAt       DateTime?      @db.Timestamptz(3)
+  transporter        String?
+  vehicleNo          String?
+  lrRef              String?
+  eta                DateTime?      @db.Date
+  receivedAt         DateTime?      @db.Timestamptz(3)
+  receivedById       BigInt?
+  cancelReason       String?
+  note               String?
+
+  machine        Machine                @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  fromAssignment MachineAssignment?     @relation(fields: [fromAssignmentId], references: [id])
+  fromFirm       Firm                   @relation("TransferFromFirm", fields: [fromFirmId], references: [id])
+  toFirm         Firm                   @relation("TransferToFirm", fields: [toFirmId], references: [id])
+  requestedBy    User?                  @relation("TransferRequestedBy", fields: [requestedById], references: [id])
+  approvedBy     User?                  @relation("TransferApprovedBy", fields: [approvedById], references: [id])
+  receivedBy     User?                  @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+  events         MachineTransferEvent[]
+
+  @@index([toFirmId, status])
+  @@index([fromFirmId, status])
+  @@map("machine_transfers")
+}
+
+model MachineTransferEvent {
+  id         String          @id @default(cuid())
+  transferId String
+  fromStatus TransferStatus?
+  toStatus   TransferStatus
+  actorId    BigInt?
+  note       String?
+  createdAt  DateTime        @default(now()) @db.Timestamptz(3)
+
+  transfer MachineTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  actor    User?           @relation("TransferEventActor", fields: [actorId], references: [id])
+
+  @@index([transferId, createdAt])
+  @@map("machine_transfer_events")
 }

@@ -9,13 +9,22 @@ import assetRoutes from '../modules/asset/routes/asset.routes';
 import { assetController } from '../modules/asset/controllers/asset.controller';
 import maintenanceRoutes from '../modules/maintenance/routes/maintenance.routes';
 import repairRoutes from '../modules/repair/routes/repair.routes';
-import { authenticateJWT } from '../middleware/auth.middleware';
+import fleetRoutes from '../modules/fleet/routes/fleet.routes';
+import { authenticateJWT, requireLogin } from '../middleware/auth.middleware';
 import { getAwsConfigStatus } from '../config';
 import { prisma } from '../database/prisma';
 import { UserController } from '../modules/store/controllers/user.controller';
+import { CandidateController } from '../modules/hr/controllers/candidate.controller';
+import { AttendanceController } from '../modules/hr/controllers/attendance.controller';
+import { UploadController } from '../modules/store/controllers/upload.controller';
+import { validate } from '../middleware/validate.middleware';
+import { submitCandidateSchema } from '../modules/hr/validators/candidate.validator';
 
 const router = Router();
 const userController = new UserController();
+const candidateController = new CandidateController();
+const attendanceController = new AttendanceController();
+const uploadController = new UploadController();
 
 router.get('/health', (_req, res) => {
   res.json({
@@ -26,7 +35,52 @@ router.get('/health', (_req, res) => {
 });
 
 // Public Asset Verification (for mobile QR code scanning without authentication)
-router.get('/public/assets/:id', assetController.getById);
+router.get('/public/assets/:id', assetController.getPublic);
+
+// Public HR Candidate Application (for mobile QR code scanning without authentication)
+router.get(['/public/hr/indent/:id', '/hr/public/indent/:id', '/hrfms/public/indent/:id'], candidateController.getPublicIndent);
+router.post(['/public/hr/apply', '/hr/public/apply', '/hrfms/public/apply'], validate(submitCandidateSchema), candidateController.submitPublic);
+
+// Public Attendance Kiosk & QR Punching (no login required)
+router.get(['/public/attendance/employees', '/hr/public/attendance/employees', '/hrfms/public/attendance/employees'], async (_req, res, next) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      where: { status: 'active' },
+      select: {
+        id: true,
+        employee_id: true,
+        emp_code: true,
+        name: true,
+        email: true,
+        designation: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+    res.json({
+      success: true,
+      data: employees.map((e: any) => ({
+        id: e.id.toString(),
+        employeeId: e.employee_id,
+        empCode: e.emp_code,
+        name: e.name,
+        email: e.email,
+        designation: e.designation,
+        department: e.department ? { id: Number(e.department.id), name: e.department.name } : null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+router.post(['/public/attendance/upload/presign', '/hr/public/attendance/upload/presign', '/hrfms/public/attendance/upload/presign'], uploadController.presignUpload);
+router.post(['/public/attendance/punch', '/hr/public/attendance/punch', '/hrfms/public/attendance/punch'], attendanceController.submitPunch);
+router.get(['/public/attendance/punches', '/hr/public/attendance/punches', '/hrfms/public/attendance/punches'], attendanceController.listPunches);
 
 router.use('/store', storeRoutes);
 router.use('/email', emailRoutes);
@@ -36,17 +90,20 @@ router.use('/document', authenticateJWT, documentRoutes);
 router.use('/doc-submanager', authenticateJWT, documentRoutes);
 router.use('/hr', authenticateJWT, hrRoutes);
 router.use('/hrfms', authenticateJWT, hrRoutes);
-router.use('/assets', authenticateJWT, assetRoutes);
-router.use('/maintenance', authenticateJWT, maintenanceRoutes);
-router.use('/repair-system', authenticateJWT, repairRoutes);
+router.use('/assets', authenticateJWT, requireLogin, assetRoutes);
+router.use('/maintenance', authenticateJWT, requireLogin, maintenanceRoutes);
+router.use('/repair-system', authenticateJWT, requireLogin, repairRoutes);
+router.use('/fleet', authenticateJWT, fleetRoutes);
+// /assets, /maintenance, /repair-system and /user/list are for logged-in users only: before this, a request with no token reached
+// them with no user (approve / transfer / mark-done accepted anonymous calls). The public QR route above stays open.
 
 // Assignee picker shared by Maintenance's assign/transfer/breakdown-assignee UIs —
 // {id, name, email, role, employeeId}, matching AssignableUser in the frontend.
-router.get('/user/list', authenticateJWT, async (_req, res, next) => {
+router.get('/user/list', authenticateJWT, requireLogin, async (_req, res, next) => {
   try {
     const users = await prisma.user.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, user_name: true, role: true, employee: { select: { employee_id: true } } },
+      select: { id: true, name: true, user_name: true, role: true, employee: { select: { employee_id: true, designation: true, phone: true } } },
     });
     res.json({
       success: true,
@@ -56,6 +113,9 @@ router.get('/user/list', authenticateJWT, async (_req, res, next) => {
         email: '',
         role: u.role || 'USER',
         employeeId: u.employee?.employee_id ?? null,
+        // read from the Employee record (not duplicated on the user); logged-in users only
+        designation: u.employee?.designation ?? null,
+        phone: u.employee?.phone ?? null,
       })),
     });
   } catch (err) {

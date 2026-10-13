@@ -4,6 +4,7 @@ import { prisma } from '../../../database/prisma';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ApiError } from '../../../utils/ApiError';
 import { config } from '../../../config';
+import type { AuthenticatedRequest } from '../../../middleware/auth.middleware';
 
 function parseUserPayload(body: any) {
   const payload: any = {};
@@ -109,16 +110,44 @@ function parseUserPayload(body: any) {
   return payload;
 }
 
+// Who is calling: the user row behind the JWT (null when anonymous).
+async function loadCaller(req: Request) {
+  const id = (req as AuthenticatedRequest).user?.id;
+  if (!id || !/^\d+$/.test(String(id))) return null;
+  return prisma.user.findUnique({ where: { id: BigInt(id) } });
+}
+
+type Caller = NonNullable<Awaited<ReturnType<typeof loadCaller>>>;
+
+// The Manage Users page can be given to a plain USER (page key manage_users), so the server checks the same things the page does.
+function canManageUsers(caller: Caller | null): boolean {
+  if (!caller) return false;
+  if (caller.role === 'SUPER_ADMIN' || caller.role === 'ADMIN' || caller.administrate) return true;
+  const pa: any = caller.page_access;
+  const entry = pa && typeof pa === 'object' ? pa.manage_users : undefined;
+  return Boolean(entry) && entry !== 'NONE';
+}
+
+// Only a SUPER_ADMIN may hand out or touch the SUPER_ADMIN role.
+function assertCanTouchRole(caller: Caller, targetRole: string | null | undefined, newRole?: string) {
+  if (caller.role === 'SUPER_ADMIN') return;
+  if (targetRole === 'SUPER_ADMIN' || newRole === 'SUPER_ADMIN') {
+    throw new ApiError(403, 'Only a super admin can create, change or delete a super admin');
+  }
+}
+
 export class UserController {
-  // GET /api/store/users
+  // GET /api/store/users: also the assignee picker of the checklist screens, so any logged-in user may read it, but only a user
+  // manager sees passwords (they are plaintext until the hashing stage).
   getUsers = asyncHandler(async (req: Request, res: Response) => {
     const users = await prisma.user.findMany({
       orderBy: { timestamp: 'desc' },
     });
+    const showPasswords = canManageUsers(await loadCaller(req));
 
     res.json({
       success: true,
-      data: users,
+      data: showPasswords ? users : users.map(({ password: _password, ...rest }) => rest),
     });
   });
 
@@ -179,6 +208,13 @@ export class UserController {
       });
     }
 
+    // Session restore: the token must already belong to this user (or to a user manager). Before, anyone could mint a token
+    // for any username from here.
+    const caller = await loadCaller(req);
+    if (!caller || (caller.id !== user.id && !canManageUsers(caller))) {
+      throw new ApiError(403, 'Forbidden: this session does not belong to that user');
+    }
+
     const checklistToken = jwt.sign(
       {
         id: String(user.id),
@@ -198,7 +234,25 @@ export class UserController {
 
   // POST /api/store/users
   createUser = asyncHandler(async (req: Request, res: Response) => {
-    const userData = parseUserPayload(req.body);
+    let userData = parseUserPayload(req.body);
+
+    const caller = await loadCaller(req);
+    if (!caller) {
+      // Public "Create Account": a plain, view-only account with no systems, pages or projects until a user manager grants them.
+      userData = {
+        user_name: userData.user_name,
+        name: userData.name,
+        password: userData.password,
+        role: 'USER',
+        modify_access: 'VIEW',
+        system_access: [],
+        page_access: {},
+        firm_access: [],
+      };
+    } else {
+      if (!canManageUsers(caller)) throw new ApiError(403, 'Forbidden: you cannot manage users');
+      assertCanTouchRole(caller, null, userData.role);
+    }
 
     if (!userData.modify_access) {
       userData.modify_access = 'EDIT';
@@ -219,6 +273,12 @@ export class UserController {
     const id = req.params.id as string;
     const userData = parseUserPayload(req.body);
 
+    const caller = await loadCaller(req);
+    if (!canManageUsers(caller)) throw new ApiError(403, 'Forbidden: you cannot manage users');
+    const target = await prisma.user.findUnique({ where: { id: BigInt(id) } });
+    if (!target) throw new ApiError(404, 'User not found');
+    assertCanTouchRole(caller!, target.role, userData.role);
+
     const updated = await prisma.user.update({
       where: { id: BigInt(id) },
       data: userData,
@@ -233,6 +293,12 @@ export class UserController {
   // DELETE /api/store/users/:id
   deleteUser = asyncHandler(async (req: Request, res: Response) => {
     const id = req.params.id as string;
+
+    const caller = await loadCaller(req);
+    if (!canManageUsers(caller)) throw new ApiError(403, 'Forbidden: you cannot manage users');
+    const target = await prisma.user.findUnique({ where: { id: BigInt(id) } });
+    if (!target) throw new ApiError(404, 'User not found');
+    assertCanTouchRole(caller!, target.role);
 
     await prisma.user.delete({
       where: { id: BigInt(id) },

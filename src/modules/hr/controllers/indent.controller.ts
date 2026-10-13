@@ -44,7 +44,7 @@ export function loadIndents(): HrIndentRecord[] {
   }
 }
 
-function saveIndents(data: HrIndentRecord[]): void {
+export function saveIndents(data: HrIndentRecord[]): void {
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -63,6 +63,26 @@ export class IndentController {
   getAll = asyncHandler(async (_req: Request, res: Response) => {
     // Refresh from disk in case of external changes
     this.indents = loadIndents();
+    try {
+      const candidates = await prisma.hrCandidate.findMany({
+        where: { indent_id: { not: null } },
+        select: { id: true, indent_id: true },
+      });
+      const map = new Map<string, { id: number }[]>();
+      for (const c of candidates) {
+        if (!c.indent_id) continue;
+        const list = map.get(c.indent_id) || [];
+        list.push({ id: Number(c.id) });
+        map.set(c.indent_id, list);
+      }
+      for (const indent of this.indents) {
+        const fromDb = map.get(String(indent.id)) || map.get(String(indent.recordId)) || [];
+        if (fromDb.length > 0 || (indent.candidates && indent.candidates.length === 0)) {
+          indent.candidates = fromDb;
+          indent._count = { candidates: fromDb.length };
+        }
+      }
+    } catch (_err) {}
     res.json({
       success: true,
       data: this.indents,

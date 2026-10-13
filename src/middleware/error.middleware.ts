@@ -14,6 +14,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     success: false,
     statusCode,
     message,
+    error: message, // additive: lets new-endpoint clients read { success, data, error } uniformly
     ...(err.errors && { errors: err.errors }),
     ...(config.env === 'development' && { stack: err.stack }),
   };

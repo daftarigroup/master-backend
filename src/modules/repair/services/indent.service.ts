@@ -1,10 +1,12 @@
 import { Prisma, RepairIndentStatus } from '@prisma/client';
 import { prisma } from '../../../database/prisma';
 import { ApiError } from '../../../utils/ApiError';
-import { documentSequenceService } from '../../../services/documentSequence.service';
+import { nextIndentNumber } from './indentNumber';
+import { syncWorkOrderFromIndent } from '../../maintenance/services/outsource.service';
 import { indentRepository, INDENT_INCLUDE } from '../repositories/indent.repository';
 import { indentMapper } from './indent.mapper';
 import { UserAuthContext } from '../../../utils/currentUser';
+import { parseBigIntId, parseFirmId, resolveFirmScope } from '../../../utils/firmScope';
 
 type Tx = Prisma.TransactionClient;
 
@@ -64,34 +66,12 @@ function buildIndentScope(query: Record<string, any> = {}, auth?: UserAuthContex
   if (query.taskStatus) andConditions.push({ status: indentMapperStatus(query.taskStatus) });
 
   if (auth) {
-    if (auth.role === 'SUPER_ADMIN') {
-      if (query.firmId || query.projectId) {
-        const fId = BigInt(query.firmId || query.projectId);
-        andConditions.push({
-          OR: [{ firmId: fId }, { machine: { firmId: fId } }, { asset: { firmId: fId } }],
-        });
-      }
-    } else if (auth.role === 'ADMIN') {
-      const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
-      let allowedFirms = auth.permittedFirms;
-      if (requestedFirm !== null) {
-        allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
-      }
-      const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
-      andConditions.push({
-        OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }, { asset: { firmId: { in: ids } } }],
-      });
-    } else {
-      // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
-      const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
-      let allowedFirms = auth.permittedFirms;
-      if (requestedFirm !== null) {
-        allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
-      }
-      const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
-      andConditions.push({
-        OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }, { asset: { firmId: { in: ids } } }],
-      });
+    // 'all' / '' / junk = no specific firm (raw BigInt() of those was a 500). Indents can belong to a firm directly,
+    // through their machine, or through their asset.
+    const scope = resolveFirmScope(auth, query.firmId ?? query.projectId);
+    if (!scope.all) {
+      const match = scope.firmIds.length === 1 && auth.role === 'SUPER_ADMIN' ? scope.firmIds[0] : { in: scope.firmIds };
+      andConditions.push({ OR: [{ firmId: match }, { machine: { firmId: match } }, { asset: { firmId: match } }] });
     }
   }
 
@@ -127,8 +107,8 @@ export const indentService = {
   async create(body: Record<string, any>) {
     return prisma.$transaction(async (tx) => {
       const machine = await resolveMachine(tx, body);
-      const firmId = machine?.firmId ?? (body.firmId ? BigInt(body.firmId) : (body.projectId ? BigInt(body.projectId) : null));
-      const indentNumber = await documentSequenceService.next({ prefix: 'REP', year: new Date().getFullYear(), pad: 3 }, tx);
+      const firmId = machine?.firmId ?? (body.firmId || body.projectId ? parseBigIntId(body.firmId || body.projectId, 'firmId') : null);
+      const indentNumber = await nextIndentNumber(tx);
 
       const row = await indentRepository.create(
         {
@@ -145,9 +125,9 @@ export const indentService = {
           approvalStatus: 'PENDING',
           ...(firmId ? { firm: { connect: { id: firmId } } } : {}),
           ...(machine ? { machine: { connect: { id: machine.id } }, ...(machine.assetId ? { asset: { connect: { id: machine.assetId } } } : {}) } : {}),
-          ...(machine?.departmentId ? { department: { connect: { id: machine.departmentId } } } : body.departmentId ? { department: { connect: { id: BigInt(body.departmentId) } } } : {}),
+          ...(machine?.departmentId ? { department: { connect: { id: machine.departmentId } } } : body.departmentId ? { department: { connect: { id: parseBigIntId(body.departmentId, 'departmentId') } } } : {}),
           ...(body.machinePartId ? { machinePart: { connect: { id: body.machinePartId } } } : {}),
-          ...(body.doerUserId ? { doer: { connect: { id: BigInt(body.doerUserId) } } } : {}),
+          ...(body.doerUserId ? { doer: { connect: { id: parseBigIntId(body.doerUserId, 'doerUserId') } } } : {}),
           ...(body.vendorId ? { vendor: { connect: { id: body.vendorId } } } : {}),
         },
         tx
@@ -190,7 +170,9 @@ export const indentService = {
 
       const wasTerminal = TERMINAL.includes(existing.status);
       const isTerminal = newStatus ? TERMINAL.includes(newStatus) : wasTerminal;
-      if (isTerminal && !wasTerminal) {
+      // An indent that belongs to a work order is rolled up by that work order (once, when the machine is received),
+      // so it must not also be counted here: that was the second half of the out-source double count.
+      if (isTerminal && !wasTerminal && !existing.workOrderId) {
         const partNames = updated.machinePart?.name ? [updated.machinePart.name] : [];
         await applyCompletionCascade(tx, updated.machineId, Number(updated.maintenanceCost ?? 0), partNames);
       }
@@ -283,6 +265,7 @@ export const indentService = {
         update: dispatchPayload,
       });
       await tx.repairIndent.update({ where: { id }, data: { status: 'SENT_FOR_REPAIR' } });
+      await syncWorkOrderFromIndent(tx, id, 'SENT', { at: sentAt });
       return indentMapper.toDTO(await tx.repairIndent.findUniqueOrThrow({ where: { id }, include: INDENT_INCLUDE }));
     });
   },
@@ -293,14 +276,7 @@ export const indentService = {
 
       const inspectedByName = data.inspectedByName || (typeof data.inspectedBy === 'string' ? data.inspectedBy.trim() : undefined);
 
-      let inspectedByUserId: bigint | undefined = undefined;
-      if (data.inspectedByUserId) {
-        try {
-          inspectedByUserId = BigInt(data.inspectedByUserId);
-        } catch {
-          inspectedByUserId = undefined;
-        }
-      }
+      const inspectedByUserId: bigint | undefined = parseFirmId(data.inspectedByUserId) ?? undefined;
 
       const validResults = ['PASS', 'FAIL', 'PENDING'];
       const rawResult = typeof data.inspectionResult === 'string' ? data.inspectionResult.trim() : '';
@@ -335,6 +311,12 @@ export const indentService = {
         update: receivingPayload,
       });
       await tx.repairIndent.update({ where: { id }, data: { status: 'STORE_IN' } });
+      await syncWorkOrderFromIndent(tx, id, 'RECEIVED', {
+        at: receivingPayload.receivedAt,
+        billNo: receivingPayload.billNo ?? null,
+        billUrl: receivingPayload.billImage ?? null,
+        amount: receivingPayload.totalBillAmount ?? null,
+      });
       return indentMapper.toDTO(await tx.repairIndent.findUniqueOrThrow({ where: { id }, include: INDENT_INCLUDE }));
     });
   },
@@ -405,7 +387,9 @@ export const indentService = {
           },
         });
 
-        if (!TERMINAL.includes(existing.status)) {
+        // a work-order-linked indent settles through its work order (one rollup); a standalone legacy indent keeps the old cascade
+        const linkedToWorkOrder = await syncWorkOrderFromIndent(tx, id, 'PAID', { at: paymentPayload.paidAt, amount: cumulativePaid });
+        if (!linkedToWorkOrder && !TERMINAL.includes(existing.status)) {
           const withPart = await tx.repairIndent.findUniqueOrThrow({ where: { id }, include: { machinePart: true } });
           const partNames = withPart.machinePart?.name ? [withPart.machinePart.name] : [];
           await applyCompletionCascade(tx, updated.machineId, cumulativePaid, partNames);
@@ -469,7 +453,7 @@ export const indentService = {
       prisma.machine.findMany({
         where: auth?.role === 'ADMIN' || auth?.role === 'USER'
           ? { firmId: { in: auth.permittedFirms.length > 0 ? auth.permittedFirms : [-1n] } }
-          : firmId ? { firmId: BigInt(firmId) } : {},
+          : parseFirmId(firmId) !== null ? { firmId: parseFirmId(firmId)! } : {},
         select: { status: true },
       }),
     ]);

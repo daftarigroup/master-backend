@@ -14,6 +14,7 @@ const assetFields = {
   productName: z.string().trim().min(1).optional(),
   firmId: z.string().nullish(),
   projectId: z.string().nullish(),
+  ownershipType: z.enum(['OWNED', 'RENTED']).optional(),
   category: category.optional(),
   type: assetType.optional(),
   brand: z.string().nullish(),

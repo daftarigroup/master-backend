@@ -216,6 +216,109 @@ export class CandidateController {
   });
 
   /**
+   * GET /public/hr/indent/:id
+   * Public info about job opening for QR candidate application
+   */
+  getPublicIndent = asyncHandler(async (req: Request, res: Response) => {
+    const id = String(req.params.id || '').trim();
+    if (!id || id === 'direct' || id === 'general') {
+      res.json({
+        success: true,
+        data: {
+          isDirect: true,
+          title: 'Direct Candidate Application',
+          status: 'open',
+        },
+      });
+      return;
+    }
+    const indents = loadIndents();
+    const indent = indents.find(
+      (i) => String(i.id) === id || String(i.recordId).toLowerCase() === id.toLowerCase()
+    );
+    if (!indent) {
+      res.json({
+        success: true,
+        data: {
+          isDirect: true,
+          title: 'General Candidate Application',
+          status: 'open',
+        },
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      data: {
+        id: String(indent.id),
+        recordId: indent.recordId,
+        title: indent.title,
+        department: indent.department,
+        gender: indent.gender,
+        prefer: indent.prefer,
+        experienceYears: indent.experienceYears,
+        noOfPost: indent.noOfPost,
+        jobType: indent.jobType,
+        status: indent.status,
+      },
+    });
+  });
+
+  /**
+   * POST /public/hr/apply
+   * Public candidate submission from QR code scans (no JWT required)
+   */
+  submitPublic = asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body;
+    const year = new Date().getFullYear();
+    const count = await prisma.hrCandidate.count();
+    const candidateEnquiryNo = `ENQ-${year}-${String(count + 1).padStart(3, '0')}`;
+
+    const candidate = await prisma.hrCandidate.create({
+      data: {
+        candidate_enquiry_no: candidateEnquiryNo,
+        candidate_name: body.candidateName,
+        dob: body.dob ? new Date(body.dob) : null,
+        phone_no: body.phoneNo,
+        email: body.email || null,
+        previous_company: body.previousCompany || null,
+        experience: body.experience || null,
+        previous_position: body.previousPosition || null,
+        marital_status: body.maritalStatus || null,
+        aadhar_no: body.aadharNo || null,
+        last_salary: body.lastSalary || null,
+        reason_for_leaving: body.reasonForLeaving || null,
+        current_address: body.currentAddress || null,
+        indent_id: body.indentId ? String(body.indentId) : null,
+        photo: body.photo || null,
+        resume: body.resume || null,
+        status: 'pending',
+        notes: body.notes || 'Applied via QR Code',
+      } as any,
+    });
+
+    await HrAuditService.log({
+      entityType: 'candidate',
+      entityId: candidate.id.toString(),
+      eventType: 'CANDIDATE_CREATED',
+      performedBy: 'Online Applicant (QR)',
+      notes: `Public application submitted for ${candidate.candidate_name}${
+        body.indentId ? ` (Position #${body.indentId})` : ''
+      }`,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Application submitted successfully',
+      data: {
+        id: candidate.id.toString(),
+        candidateEnquiryNo: candidate.candidate_enquiry_no,
+        candidateName: candidate.candidate_name,
+      },
+    });
+  });
+
+  /**
    * PATCH /candidate/:id
    */
   update = asyncHandler(async (req: Request, res: Response) => {

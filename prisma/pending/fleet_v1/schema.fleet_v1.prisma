@@ -1,0 +1,3046 @@
+// Prisma Schema for Store App (Refactored from master-frontend/database/store_schema.sql)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccessType {
+  VIEW
+  EDIT
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+enum TaskStatus {
+  pending
+  done
+  extend
+  extended
+  approved
+  rejected
+}
+
+model AreaOfUse {
+  id         BigInt   @id @default(autoincrement())
+  name       String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
+
+  @@map("area_of_use")
+}
+
+model Company {
+  id                  BigInt   @id @default(autoincrement())
+  company_name        String   @db.Text
+  gstin               String?  @db.Text
+  pan                 String?  @db.Text
+  email               String?  @db.Text
+  phone               String?  @db.Text
+  address             String?  @db.Text
+  contact_person      String?  @db.Text
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @db.Timestamptz()
+  billing_address     String?  @db.Text
+  destination_address String?  @db.Text
+  firm_id             BigInt?
+  firm_name           String?  @db.Text
+  firm_rel            Firm?    @relation("company_firm", fields: [firm_id], references: [id])
+  firm                Firm[]
+
+  @@map("company")
+}
+
+model ContractorDetails {
+  id                 BigInt    @id @default(autoincrement())
+  created_at         DateTime? @default(now()) @db.Timestamptz()
+  contractor_name    String    @db.Text
+  contractor_gstin   String?   @db.Text
+  contractor_address String?   @db.Text
+  contractor_email   String?   @db.Text
+  responsible_person String?   @db.Text
+  location           String?   @db.Text
+  phone              String?   @db.Text
+  firm_id            BigInt?
+  firm_name          String?   @db.Text
+  firm               Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("contractor_details")
+}
+
+model DefaultPoTerms {
+  id         BigInt   @id @default(autoincrement())
+  term_text  String   @db.Text
+  sort_order Int?
+  active     Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
+
+  @@map("default_po_terms")
+}
+
+model Department {
+  id         BigInt     @id @default(autoincrement())
+  name       String     @db.Text
+  created_at DateTime   @default(now()) @db.Timestamptz()
+  employees  Employee[]
+
+  // Asset / Maintenance / Repair system
+  machines       Machine[]
+  repair_indents RepairIndent[]
+  technicians    Technician[]
+
+  @@map("department")
+}
+
+model Firm {
+  id                           BigInt                @id @default(autoincrement())
+  company_id                   BigInt?
+  firm_name                    String                @db.Text
+  billing_address              String?               @db.Text
+  destination_address          String?               @db.Text
+  contact_person               String?               @db.Text
+  active                       Boolean               @default(true)
+  created_at                   DateTime              @default(now()) @db.Timestamptz()
+  updated_at                   DateTime              @default(now()) @db.Timestamptz()
+  company                      Company?              @relation(fields: [company_id], references: [id])
+  fullkitting                  Fullkitting[]
+  indent                       Indent[]
+  inventory                    Inventory[]
+  issue                        Issue[]
+  payment_history              PaymentHistory[]
+  payments                     Payments[]
+  po_master                    PoMaster[]
+  quotation_history            QuotationHistory[]
+  stock_transfers_from_firm_id StockTransfers[]      @relation("from_firm_id")
+  stock_transfers_to_firm_id   StockTransfers[]      @relation("to_firm_id")
+  store_in                     StoreIn[]
+  store_in_direct              StoreInDirect[]
+  tally_entry                  TallyEntry[]
+  item                         Item[]
+  checklist_task               ChecklistTask[]
+  delegation_task              DelegationTask[]
+  area_of_use                  AreaOfUse[]
+  company_records              Company[]             @relation("company_firm")
+  contractor_details           ContractorDetails[]
+  default_po_terms             DefaultPoTerms[]
+  group_head                   GroupHead[]
+  site_engineer_details        SiteEngineerDetails[]
+  site_location_details        SiteLocationDetails[]
+  terms_and_condition          TermsAndCondition[]
+  uom                          Uom[]
+  vendors                      Vendors[]
+  project_assignments          ProjectAssignment[]
+  employees                    Employee[]            @relation("EmployeeHomeFirm")
+
+  // Asset / Maintenance / Repair system
+  assets                  Asset[]
+  machines                Machine[]
+  activity_types          ActivityType[]
+  maintenance_plans       MaintenancePlan[]
+  maintenance_work_orders MaintenanceWorkOrder[]
+  breakdown_reports       BreakdownReport[]
+  daily_machine_logs      DailyMachineLog[]
+  repair_vendors          RepairVendor[]
+  spare_parts             SparePart[]
+  repair_indents          RepairIndent[]
+  technicians             Technician[]
+  amc_contracts           AMCContract[]
+  document_sequences      DocumentSequence[]
+
+  dieselReceipts   DieselReceipt[]
+  dieselLogs       DieselLog[]
+  machineUsageLogs MachineUsageLog[]
+
+  @@map("firm")
+}
+
+model Fullkitting {
+  id                    BigInt    @id @default(autoincrement())
+  timestamp             DateTime  @db.Timestamp()
+  indent_number         String?   @db.Text
+  vendor_name           String?   @db.Text
+  product_name          String?   @db.Text
+  qty                   String?   @db.Text
+  bill_no               String?   @db.Text
+  transporting_include  String?   @db.Text
+  transporter_name      String?   @db.Text
+  amount                String?   @db.Text
+  vehical_no            String?   @db.Text
+  driver_name           String?   @db.Text
+  driver_mobile_no      String?   @db.Text
+  planned               DateTime? @db.Timestamp()
+  actual                DateTime? @db.Timestamp()
+  time_delay            String?   @db.Text
+  fms_name_match        String?   @db.Text
+  status                String?   @db.Text
+  vehicle_number        String?   @db.Text
+  from                  String?   @db.Text
+  to                    String?   @db.Text
+  material_load_details String?   @db.Text
+  bilty_number          String?   @db.Text
+  rate_type             String?   @db.Text
+  amount1               String?   @db.Text
+  bilty_image           String?   @db.Text
+  firm_name             String?   @db.Text
+  firm_id               BigInt?
+  firm                  Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("fullkitting")
+}
+
+model GroupHead {
+  id         BigInt   @id @default(autoincrement())
+  name       String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
+  item       Item[]
+
+  @@map("group_head")
+}
+
+model Indent {
+  id                       BigInt    @id @default(autoincrement())
+  timestamp                DateTime  @db.Timestamptz()
+  indent_number            String?   @db.Text
+  firm_name                String?   @db.Text
+  indenter_name            String?   @db.Text
+  department               String?   @db.Text
+  area_of_use              String?   @db.Text
+  group_head               String?   @db.Text
+  product_name             String?   @db.Text
+  quantity                 String?   @db.Text
+  uom                      String?   @db.Text
+  specifications           String?   @db.Text
+  indent_approved_by       String?   @db.Text
+  indent_type              String?   @db.Text
+  attachment               String?   @db.Text
+  indent_status            String?   @db.Text
+  no_day                   String?   @db.Text
+  planned1                 DateTime? @db.Timestamp()
+  actual1                  DateTime? @db.Timestamp()
+  time_delay1              String?   @db.Text
+  vendor_type              String?   @db.Text
+  approved_quantity        String?   @db.Text
+  planned2                 DateTime? @db.Timestamp()
+  actual2                  DateTime? @db.Timestamp()
+  time_delay2              String?   @db.Text
+  vendor_name1             String?   @db.Text
+  select_rate_type1        String?   @db.Text
+  rate1                    String?   @db.Text
+  with_tax_or_not1         String?   @db.Text
+  tax_value1               String?   @db.Text
+  payment_term1            String?   @db.Text
+  whatsapp_number1         String?   @db.Text
+  email_id1                String?   @db.Text
+  vendor_name2             String?   @db.Text
+  select_rate_type2        String?   @db.Text
+  rate2                    String?   @db.Text
+  with_tax_or_not2         String?   @db.Text
+  tax_value2               String?   @db.Text
+  payment_term2            String?   @db.Text
+  whatsapp_number2         String?   @db.Text
+  email_id2                String?   @db.Text
+  vendor_name3             String?   @db.Text
+  select_rate_type3        String?   @db.Text
+  rate3                    String?   @db.Text
+  with_tax_or_not3         String?   @db.Text
+  tax_value3               String?   @db.Text
+  payment_term3            String?   @db.Text
+  whatsapp_number3         String?   @db.Text
+  email_id3                String?   @db.Text
+  product_code             String?   @db.Text
+  comparison_sheet         String?   @db.Text
+  planned3                 DateTime? @db.Timestamp()
+  actual3                  DateTime? @db.Timestamp()
+  time_delay3              String?   @db.Text
+  approved_vendor_name     String?   @db.Text
+  approved_rate            String?   @db.Text
+  with_tax_or_not4         String?   @db.Text
+  tax_value4               String?   @db.Text
+  approved_payment_term    String?   @db.Text
+  approved_date            String?   @db.Text
+  planned4                 DateTime? @db.Timestamp()
+  actual4                  DateTime? @db.Timestamp()
+  time_delay4              String?   @db.Text
+  po_number                String?   @db.Text
+  po_copy                  String?   @db.Text
+  payment_term             String?   @db.Text
+  planned5                 DateTime? @db.Timestamp()
+  actual5                  DateTime? @db.Timestamp()
+  time_delay               String?   @db.Text
+  po_qty                   String?   @db.Text
+  pending_po_qty           String?   @db.Text
+  status                   String?   @db.Text
+  total_qty                String?   @db.Text
+  received_qty             String?   @db.Text
+  planned7                 DateTime? @db.Timestamp()
+  actual7                  DateTime? @db.Timestamp()
+  time_delay7              String?   @db.Text
+  make_payment_link        String?   @db.Text
+  lifting_status           String?   @db.Text
+  pending_lift_qty         String?   @db.Text
+  po_requred               String?   @db.Text
+  vendor_rate              String?   @db.Text
+  vendor_amount            String?   @db.Text
+  delivery_date            DateTime? @db.Date
+  payment_type             String?   @db.Text
+  pending_qty              String?   @db.Text
+  cancel_qty               String?   @db.Text
+  advance_percent1         String?   @db.Text
+  advance_percent2         String?   @db.Text
+  advance_percent3         String?   @db.Text
+  approved_advance_percent String?   @db.Text
+  expected_req_date        DateTime? @db.Date
+  min_stock_qty            String?   @db.Text
+  quotation_no1            String?   @default("") @db.Text
+  quotation_date1          String?   @default("") @db.Text
+  quotation_no2            String?   @default("") @db.Text
+  quotation_date2          String?   @default("") @db.Text
+  quotation_no3            String?   @default("") @db.Text
+  quotation_date3          String?   @default("") @db.Text
+  approved_quotation_no    String?   @default("") @db.Text
+  approved_quotation_date  String?   @default("") @db.Text
+  vendor1_rank             String?   @db.Text
+  vendor2_rank             String?   @db.Text
+  vendor3_rank             String?   @db.Text
+  delivery_time1           String?   @db.Text
+  delivery_time2           String?   @db.Text
+  delivery_time3           String?   @db.Text
+  make1                    String?   @db.Text
+  make2                    String?   @db.Text
+  make3                    String?   @db.Text
+  indent_url               String?   @default("") @db.Text
+  accept_indent_url        String?   @default("") @db.Text
+  firm_id                  BigInt?
+  firm                     Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("indent")
+}
+
+model Inventory {
+  id                BigInt   @id @default(autoincrement())
+  timestamp         DateTime @default(now()) @db.Timestamp()
+  group_head        String?  @db.Text
+  item_name         String?  @db.Text
+  uom               String?  @db.Text
+  max_level         String?  @db.Text
+  opening           String?  @db.Text
+  individual_rate   String?  @db.Text
+  avg_price         Decimal?
+  indented          Decimal? @default(0)
+  approved          Decimal?
+  purchase_quantity Decimal?
+  out_quantity      Decimal?
+  current           Decimal?
+  total_price       Decimal?
+  color_code        String?  @db.Text
+  received_quantity Decimal?
+  return_quantity   Decimal?
+  request_quantity  Decimal?
+  firm_name         String?  @db.Text
+  firm_id           BigInt?
+  firm              Firm?    @relation(fields: [firm_id], references: [id])
+
+  @@map("inventory")
+}
+
+model Issue {
+  id                  BigInt    @id @default(autoincrement())
+  timestamp           DateTime  @db.Timestamptz()
+  department          String?   @db.Text
+  group_head          String?   @db.Text
+  product_name        String?   @db.Text
+  quantity            String?   @db.Text
+  uom                 String?   @db.Text
+  issue_to            String?   @db.Text
+  planned1            DateTime? @db.Timestamp()
+  actual1             DateTime? @db.Timestamp()
+  time_delay1         String?   @db.Text
+  status              String?   @db.Text
+  given_qty           String?   @db.Text
+  issue_no            String?   @db.Text
+  constructor_name    String?   @db.Text
+  site_location       String?   @db.Text
+  firm_name           String?   @db.Text
+  rejected_damage_qty String?   @db.Text
+  damage_remark       String?   @db.Text
+  return_person_name  String?   @db.Text
+  issue_person_name   String?   @db.Text
+  issue_slip          String?   @db.Text
+  return_slip         String?   @db.Text
+  firm_id             BigInt?
+  firm                Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("issue")
+}
+
+model Item {
+  id                        BigInt     @id @default(autoincrement())
+  item_name                 String     @db.Text
+  group_head_id             BigInt?
+  uom_id                    BigInt?
+  firm_id                   BigInt?
+  created_at                DateTime   @default(now()) @db.Timestamptz()
+  regular_pay_condition     String?    @db.Text
+  third_party_pay_condition String?    @db.Text
+  group_head                GroupHead? @relation(fields: [group_head_id], references: [id])
+  uom                       Uom?       @relation(fields: [uom_id], references: [id])
+  firm                      Firm?      @relation(fields: [firm_id], references: [id])
+
+  @@map("item")
+}
+
+model Master {
+  created_at             DateTime @default(now()) @db.Timestamptz()
+  vendor_name            String?  @db.Text
+  vendor_gstin           String?  @db.Text
+  vendor_address         String?  @db.Text
+  vendor_email           String?  @db.Text
+  payment_term           String?  @db.Text
+  department             String?  @db.Text
+  group_head             String?  @db.Text
+  item_name              String?  @db.Text
+  company_name           String?  @db.Text
+  company_address        String?  @db.Text
+  company_email          String?  @db.Text
+  company_gstin          String?  @db.Text
+  company_phone          String?  @db.Text
+  billing_address        String?  @db.Text
+  company_pan            String?  @db.Text
+  destination_address    String?  @db.Text
+  default_terms          String?  @db.Text
+  person_name            String?  @db.Text
+  firm_name              String?  @db.Text
+  uom                    String?  @db.Text
+  where                  String?  @db.Text
+  fms_name               String?  @db.Text
+  indenter_name          String?  @db.Text
+  id                     BigInt   @id @default(autoincrement())
+  responsible_person     String?  @db.Text
+  regular                String?  @db.Text
+  location               String?  @db.Text
+  phone                  String?  @db.Text
+  regular_conditions     String?  @db.Text
+  third_party_conditions String?  @db.Text
+  area_of_use            String?  @db.Text
+  company_contact_person String?  @db.Text
+
+  @@map("master")
+}
+
+model PaymentHistory {
+  id                         BigInt    @id @default(autoincrement())
+  timestamp                  DateTime  @db.Timestamptz()
+  ap_payment_number          String?   @db.Text
+  status                     String?   @db.Text
+  unique_number              String?   @db.Text
+  fms_name                   String?   @db.Text
+  pay_to                     String?   @db.Text
+  amount_to_be_paid          String?   @db.Text
+  remarks                    String?   @db.Text
+  any_attachments            String?   @db.Text
+  timestamp1                 DateTime? @db.Timestamp()
+  lift_number                String?   @db.Text
+  indent_no                  String?   @db.Text
+  po_number                  String?   @db.Text
+  vendor_name                String?   @db.Text
+  product_name               String?   @db.Text
+  bill_status                String?   @db.Text
+  bill_no                    String?   @db.Text
+  qty                        String?   @db.Text
+  lead_time_to_lift_material String?   @db.Text
+  type_of_bill               String?   @db.Text
+  bill_amount                String?   @db.Text
+  discount_amount            String?   @db.Text
+  payment_type               String?   @db.Text
+  advance_amount_if_any      String?   @db.Text
+  photo_of_bill              String?   @db.Text
+  transportation_include     String?   @db.Text
+  transporter_name           String?   @db.Text
+  amount                     String?   @db.Text
+  vehicle_no                 String?   @db.Text
+  driver_name                String?   @db.Text
+  driver_mobile_no           String?   @db.Text
+  bill_remark                String?   @db.Text
+  planned                    DateTime? @db.Date
+  payment_terms              String?   @db.Text
+  firm_id                    BigInt?
+  firm                       Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("payment_history")
+}
+
+model Payments {
+  id                 BigInt    @id @default(autoincrement())
+  timestamp          DateTime? @db.Timestamptz()
+  unique_no          String?   @db.Text
+  party_name         String?   @db.Text
+  po_number          String?   @db.Text
+  total_po_amount    String?   @db.Text
+  internal_code      String?   @db.Text
+  product            String?   @db.Text
+  delivery_date      DateTime? @db.Date
+  payment_terms      String?   @db.Text
+  number_of_days     String?   @db.Text
+  pdf                String?   @db.Text
+  pay_amount         String?   @db.Text
+  file               String?   @db.Text
+  remark             String?   @db.Text
+  total_paid_amount  String?   @db.Text
+  outstanding_amount String?   @db.Text
+  status             String?   @db.Text
+  planned            DateTime? @db.Date
+  actual             DateTime? @db.Date
+  type_of_bill       String?   @db.Text
+  status1            String?   @db.Text
+  payment_form       String?   @db.Text
+  firm_name          String?   @db.Text
+  payment_done       Boolean?
+  firm_id            BigInt?
+  firm               Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("payments")
+}
+
+model PcReport {
+  id                 BigInt    @id @default(autoincrement())
+  created_at         DateTime  @default(now()) @db.Timestamptz()
+  stage              String?   @db.Text
+  total_pending      String?   @db.Text
+  total_complete     String?   @db.Text
+  pending_pmpl       String?   @db.Text
+  pending_purab      String?   @db.Text
+  pending_pmmpl      String?   @db.Text
+  pending_refrasynth String?   @db.Text
+  updated_at         DateTime? @default(now()) @db.Timestamptz()
+
+  @@map("pc_report")
+}
+
+model PoMaster {
+  id                      BigInt   @id @default(autoincrement())
+  timestamp               DateTime @db.Timestamptz()
+  po_created_date         String?  @db.Text
+  party_name              String?  @db.Text
+  po_number               String?  @db.Text
+  quotation_number        String?  @db.Text
+  quotation_date          String?  @db.Text
+  enquiry_number          String?  @db.Text
+  enquiry_date            String?  @db.Text
+  internal_code           String?  @db.Text
+  product                 String?  @db.Text
+  description             String?  @db.Text
+  quantity                String?  @db.Text
+  unit                    String?  @db.Text
+  rate                    String?  @db.Text
+  gst                     String?  @db.Text
+  discount                String?  @db.Text
+  amount                  String?  @db.Text
+  total_po_amount         String?  @db.Text
+  prepared_by             String?  @db.Text
+  approved_by             String?  @db.Text
+  pdf                     String?  @db.Text
+  delivery_date           String?  @db.Text
+  payment_terms           String?  @db.Text
+  number_of_days          String?  @db.Text
+  term1                   String?  @db.Text
+  term2                   String?  @db.Text
+  term3                   String?  @db.Text
+  term4                   String?  @db.Text
+  term5                   String?  @db.Text
+  term6                   String?  @db.Text
+  term7                   String?  @db.Text
+  term8                   String?  @db.Text
+  term9                   String?  @db.Text
+  term10                  String?  @db.Text
+  email_send_status       String?  @db.Text
+  delivery_days           String?  @db.Text
+  delivery_type           String?  @db.Text
+  firm_name               String?  @db.Text
+  total_paid_amount       Decimal?
+  outstanding_amount      Decimal?
+  status                  String?  @db.Text
+  company_email           String?  @db.Text
+  advance_percent         Decimal? @default(0)
+  advance_amount          Decimal? @default(0)
+  terms                   String?  @db.Text
+  destination_address     String?  @db.Text
+  site_engineer_name      String?  @db.Text
+  site_engineer_email     String?  @db.Text
+  site_engineer_phoneNo   String?  @db.Text
+  site_engineer_name_2    String?  @db.Text
+  site_engineer_email_2   String?  @db.Text
+  site_engineer_phoneNo_2 String?  @db.Text
+  firm_id                 BigInt?
+  firm                    Firm?    @relation(fields: [firm_id], references: [id])
+
+  @@map("po_master")
+}
+
+model QuotationHistory {
+  id             BigInt    @id @default(autoincrement())
+  created_at     DateTime? @default(now()) @db.Timestamptz()
+  timestamp      DateTime? @default(now()) @db.Timestamptz()
+  quatationNo    String    @db.Text
+  supplierName   String    @db.Text
+  adreess        String?   @db.Text
+  gst            String?   @db.Text
+  indentNo       String    @db.Text
+  product        String    @db.Text
+  description    String?   @db.Text
+  qty            String?   @db.Text
+  unit           String?   @db.Text
+  pdfLink        String?   @db.Text
+  firm           String?   @default("N/A") @db.Text
+  token          String?
+  vendor_rate    Decimal?
+  responded_at   DateTime? @db.Timestamptz()
+  vendor_remarks String?   @db.Text
+  firm_id        BigInt?
+  firm_rel       Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("quotation_history")
+}
+
+model Received {
+  id                  BigInt   @id @default(autoincrement())
+  timestamp           DateTime @default(now()) @db.Timestamptz()
+  indent_number       String?  @db.Text
+  po_date             String?  @db.Text
+  po_number           String?  @db.Text
+  vendor              String?  @db.Text
+  received_status     String?  @db.Text
+  received_quantity   String?  @db.Text
+  uom                 String?  @db.Text
+  photo_of_product    String?  @db.Text
+  warranty_status     String?  @db.Text
+  end_date            String?  @db.Text
+  bill_status         String?  @db.Text
+  bill_number         String?  @db.Text
+  bill_amount         String?  @db.Text
+  photo_of_bill       String?  @db.Text
+  any_transportations String?  @db.Text
+  transporter_name    String?  @db.Text
+  transporting_amount String?  @db.Text
+
+  @@map("received")
+}
+
+model SiteEngineerDetails {
+  id        Int     @id @default(autoincrement())
+  name      String  @db.Text
+  number    String  @db.Text
+  email     String? @db.Text
+  firm_id   BigInt?
+  firm_name String? @db.Text
+  firm      Firm?   @relation(fields: [firm_id], references: [id])
+
+  @@map("site_engineer_details")
+}
+
+model SiteLocationDetails {
+  id         BigInt    @id @default(autoincrement())
+  created_at DateTime? @default(now()) @db.Timestamptz()
+  location   String    @db.Text
+  firm_id    BigInt?
+  firm_name  String?   @db.Text
+  firm       Firm?     @relation(fields: [firm_id], references: [id])
+
+  machines       Machine[]
+  dieselReceipts DieselReceipt[]
+  dieselLogs     DieselLog[]
+
+  @@map("site_location_details")
+}
+
+model Stock {
+  id            BigInt   @id @default(autoincrement())
+  timestamp     DateTime @default(now()) @db.Timestamptz()
+  serial_number String?  @db.Text
+  group_head    String?  @db.Text
+  product_name  String?  @db.Text
+  uom           String?  @db.Text
+  opening       Decimal?
+  min_level     Decimal?
+  latest_price  Decimal?
+  intransit     Decimal?
+  received      Decimal?
+  consumed      Decimal?
+  current_stock Decimal?
+  value         Decimal?
+  required      Decimal?
+  condition     String?  @db.Text
+
+  @@map("stock")
+}
+
+model StockTransfers {
+  id           BigInt    @id @default(autoincrement())
+  timestamp    DateTime? @default(now()) @db.Timestamptz()
+  transfer_no  String    @db.Text
+  from_project String    @db.Text
+  to_project   String    @db.Text
+  product_name String    @db.Text
+  uom          String?   @db.Text
+  group_head   String?   @db.Text
+  quantity     Decimal
+  remark       String?   @default("Internal Stock Transfer") @db.Text
+  status       String?   @default("Approved") @db.Text
+  from_firm_id BigInt?
+  to_firm_id   BigInt?
+  from_firm    Firm?     @relation("from_firm_id", fields: [from_firm_id], references: [id])
+  to_firm      Firm?     @relation("to_firm_id", fields: [to_firm_id], references: [id])
+
+  @@map("stock_transfers")
+}
+
+model StoreIn {
+  id                         BigInt    @id @default(autoincrement())
+  timestamp                  DateTime  @db.Timestamptz()
+  lift_number                String?   @db.Text
+  indent_no                  String?   @db.Text
+  po_number                  String?   @db.Text
+  vendor_name                String?   @db.Text
+  product_name               String?   @db.Text
+  bill_status                String?   @db.Text
+  bill_no                    String?   @db.Text
+  qty                        String?   @db.Text
+  lead_time_to_lift_material String?   @db.Text
+  type_of_bill               String?   @db.Text
+  bill_amount                String?   @db.Text
+  discount_amount            String?   @db.Text
+  payment_type               String?   @db.Text
+  advance_amount_if_any      String?   @db.Text
+  photo_of_bill              String?   @db.Text
+  transportation_include     String?   @db.Text
+  transporter_name           String?   @db.Text
+  amount                     String?   @db.Text
+  vehicle_no                 String?   @db.Text
+  driver_name                String?   @db.Text
+  driver_mobile_no           String?   @db.Text
+  bill_remark                String?   @db.Text
+  planned6                   DateTime? @db.Timestamp()
+  actual6                    DateTime? @db.Timestamp()
+  time_delay6                String?   @db.Text
+  receiving_status           String?   @db.Text
+  received_quantity          String?   @db.Text
+  photo_of_product           String?   @db.Text
+  damage_order               String?   @db.Text
+  quantity_as_per_bill       String?   @db.Text
+  remark                     String?   @db.Text
+  planned7                   DateTime? @db.Timestamp()
+  actual7                    DateTime? @db.Timestamp()
+  time_delay7                String?   @db.Text
+  status                     String?   @db.Text
+  bill_copy_attached         String?   @db.Text
+  reason                     String?   @db.Text
+  send_debit_note            String?   @db.Text
+  planned9                   DateTime? @db.Timestamp()
+  actual9                    DateTime? @db.Timestamp()
+  time_delay9                String?   @db.Text
+  debit_note_copy            String?   @db.Text
+  debit_note_number          String?   @db.Text
+  firm_name                  String?   @db.Text
+  lifting_status             String?   @db.Text
+  planned11                  DateTime? @db.Timestamp()
+  actual11                   DateTime? @db.Timestamp()
+  time_delay                 String?   @db.Text
+  bill_status_new            String?   @db.Text
+  bill_image_status          String?   @db.Text
+  indent_date                String?   @db.Text
+  indent_qty                 String?   @db.Text
+  purchase_date              String?   @db.Text
+  material_date              String?   @db.Text
+  party_name                 String?   @db.Text
+  location                   String?   @db.Text
+  area                       String?   @db.Text
+  not_bill_received_no       String?   @db.Text
+  indented_for               String?   @db.Text
+  approved_party_name        String?   @db.Text
+  rate                       String?   @db.Text
+  total_rate                 String?   @db.Text
+  bill_received2             String?   @db.Text
+  price_as_per_po_check      String?   @db.Text
+  hod_status                 String?   @db.Text
+  hod_remark                 String?   @db.Text
+  hod_planned                DateTime? @db.Timestamptz()
+  hod_actual                 DateTime? @db.Timestamptz()
+  challan_no                 String?   @db.Text
+  challan_image              String?   @db.Text
+  receiver_name              String?   @db.Text
+  firm_name_match            String?   @db.Text
+  firm_id                    BigInt?
+  firm                       Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("store_in")
+}
+
+model StoreInDirect {
+  id                     String    @id @default(uuid())
+  lift_number            String?   @db.Text
+  indent_no              String?   @db.Text
+  receiver_name          String    @db.Text
+  vendor_name            String    @db.Text
+  bill_no                String?   @db.Text
+  bill_amount            Decimal?  @default(0)
+  product_name           String    @db.Text
+  qty                    Decimal?  @default(0)
+  receiving_status       String?   @default("Received") @db.Text
+  received_quantity      Decimal?  @default(0)
+  photo_of_bill          String?   @db.Text
+  photo_of_product       String?   @db.Text
+  transportation_include String?   @default("No") @db.Text
+  transporter_name       String?   @db.Text
+  amount                 Decimal?  @default(0)
+  vehicle_no             String?   @db.Text
+  firm_name_match        String?   @db.Text
+  timestamp              DateTime? @db.Timestamptz()
+  actual6                DateTime? @db.Timestamptz()
+  hod_status             String?   @db.Text
+  created_at             DateTime? @db.Timestamptz()
+  firm_id                BigInt?
+  firm_name              String?   @db.Text
+  firm                   Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("store_in_direct")
+}
+
+model TallyEntry {
+  id                  BigInt    @id @default(autoincrement())
+  timestamp           DateTime  @db.Timestamp()
+  lift_number         String?   @db.Text
+  indent_number       String?   @db.Text
+  po_number           String?   @db.Text
+  material_in_date    String?   @db.Text
+  product_name        String?   @db.Text
+  bill_status         String?   @db.Text
+  qty                 String?   @db.Text
+  party_name          String?   @db.Text
+  bill_amt            String?   @db.Text
+  bill_image          String?   @db.Text
+  bill_no             String?   @db.Text
+  location            String?   @db.Text
+  type_of_bills       String?   @db.Text
+  product_image       String?   @db.Text
+  area                String?   @db.Text
+  indented_for        String?   @db.Text
+  approved_party_name String?   @db.Text
+  rate                String?   @db.Text
+  indent_qty          String?   @db.Text
+  total_rate          String?   @db.Text
+  bill_recieved_later String?   @db.Text
+  planned1            DateTime? @db.Timestamp()
+  actual1             DateTime? @db.Timestamp()
+  delay1              String?   @db.Text
+  status1             String?   @db.Text
+  firm_name           String?   @db.Text
+  remarks1            String?   @db.Text
+  planned2            DateTime? @db.Timestamp()
+  actual2             DateTime? @db.Timestamp()
+  delay2              String?   @db.Text
+  status2             String?   @db.Text
+  remarks2            String?   @db.Text
+  planned3            DateTime? @db.Timestamp()
+  actual3             DateTime? @db.Timestamp()
+  delay3              String?   @db.Text
+  status3             String?   @db.Text
+  remarks3            String?   @db.Text
+  planned4            DateTime? @db.Timestamp()
+  actual4             DateTime? @db.Timestamp()
+  delay4              String?   @db.Text
+  status4             String?   @db.Text
+  remarks4            String?   @db.Text
+  planned5            DateTime? @db.Timestamp()
+  actual5             DateTime? @db.Timestamp()
+  delay5              String?   @db.Text
+  status5             String?   @db.Text
+  remarks5            String?   @db.Text
+  firm_name_match     String?   @db.Text
+  firm_id             BigInt?
+  firm                Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("tally_entry")
+}
+
+model TermsAndCondition {
+  id         BigInt    @id @default(autoincrement())
+  title      String?   @db.Text
+  name       String    @db.Text
+  created_at DateTime? @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?   @db.Text
+  firm       Firm?     @relation(fields: [firm_id], references: [id])
+
+  @@map("terms_and_condition")
+}
+
+model Uom {
+  id         BigInt   @id @default(autoincrement())
+  name       String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+  firm_id    BigInt?
+  firm_name  String?  @db.Text
+  firm       Firm?    @relation(fields: [firm_id], references: [id])
+  item       Item[]
+
+  @@map("uom")
+}
+
+model User {
+  id                                        BigInt     @id @default(autoincrement())
+  timestamp                                 DateTime   @default(now()) @db.Timestamptz()
+  user_name                                 String?    @db.Text
+  password                                  String?    @db.Text
+  name                                      String?    @db.Text
+  administrate                              Boolean?
+  store_issue                               Boolean?
+  issue_data                                Boolean?
+  inventory                                 Boolean?
+  create_indent                             Boolean?
+  create_po                                 Boolean?
+  indent_approval_view                      Boolean?
+  indent_approval_action                    Boolean?
+  update_vendor_view                        Boolean?
+  update_vendor_action                      Boolean?
+  three_party_approval_view                 Boolean?
+  three_party_approval_action               Boolean?
+  receive_item_view                         Boolean?
+  receive_item_action                       Boolean?
+  store_out_approval_view                   Boolean?
+  store_out_approval_action                 Boolean?
+  pending_indents_view                      Boolean?
+  orders_view                               Boolean?
+  again_auditing                            Boolean?
+  take_entry_by_telly                       Boolean?
+  reaudit_data                              Boolean?
+  rectify_the_mistake                       Boolean?
+  audit_data                                Boolean?
+  send_debit_note                           Boolean?
+  return_material_to_party                  Boolean?
+  exchange_materials                        Boolean?
+  instead_of_quality_check_in_received_item Boolean?
+  db_for_pc                                 Boolean?
+  bill_not_received                         Boolean?
+  store_in                                  Boolean?
+  po_history                                Boolean?
+  full_kiting                               Boolean?
+  make_payment                              Boolean?
+  pending_po                                Boolean?
+  hod_store_approval                        Boolean?
+  firm_access                               BigInt[]
+  store_issue_return                        Boolean?
+  system_access                             Json?
+  page_access                               Json?
+  modify_access                             AccessType
+  role                                      Role?      @default(USER)
+  day_off                                   String?    @db.Text
+  employee                                  Employee?
+
+  // Asset / Maintenance / Repair system — Maintenance's assignee-type fields FK
+  // here (not to Employee) because the frontend feeds them from the real
+  // `/user/list` picker (system-login accounts), not HR employee records.
+  created_assets              Asset[]
+  created_maintenance_plans   MaintenancePlan[]          @relation("PlanCreatedBy")
+  maintenance_plans_assigned  MaintenancePlan[]          @relation("PlanAssignedTo")
+  work_orders_assigned        MaintenanceWorkOrder[]     @relation("WorkOrderCurrentAssignee")
+  work_orders_completed       MaintenanceWorkOrder[]     @relation("WorkOrderCompletedBy")
+  approvals_submitted         WorkOrderApprovalRequest[] @relation("ApprovalSubmittedBy")
+  approvals_reviewed          WorkOrderApprovalRequest[] @relation("ApprovalReviewedBy")
+  work_order_transfers_from   WorkOrderTransfer[]        @relation("TransferFromUser")
+  work_order_transfers_to     WorkOrderTransfer[]        @relation("TransferToUser")
+  work_order_status_changes   WorkOrderStatusLog[]       @relation("StatusLogChangedBy")
+  breakdown_reports_reported  BreakdownReport[]          @relation("BreakdownReportedBy")
+  breakdown_reports_assigned  BreakdownReport[]          @relation("BreakdownAssignedTo")
+  repair_indents_done         RepairIndent[]             @relation("IndentDoer")
+  repair_receivings_inspected RepairReceiving[]          @relation("ReceivingInspectedBy")
+
+  dieselReceiptsCreated DieselReceipt[]         @relation("DieselReceiptCreatedBy")
+  dieselReceiptsVoided  DieselReceipt[]         @relation("DieselReceiptVoidedBy")
+  usageLogsOperated     MachineUsageLog[]       @relation("UsageLogOperator")
+  usageLogsCreated      MachineUsageLog[]       @relation("UsageLogCreatedBy")
+  usageLogsVoided       MachineUsageLog[]       @relation("UsageLogVoidedBy")
+  dieselLogsCreated     DieselLog[]             @relation("DieselLogCreatedBy")
+  dieselLogsVoided      DieselLog[]             @relation("DieselLogVoidedBy")
+  workOrdersRequested   MaintenanceWorkOrder[]  @relation("WorkOrderRequestedBy")
+
+  @@map("user")
+}
+
+model ChecklistTask {
+  task_id                     BigInt      @id @default(autoincrement())
+  firm_id                     BigInt?
+  firm_name                   String?     @db.Text
+  doer_id                     BigInt?
+  doer_name                   String?     @db.Text
+  given_by_id                 BigInt?
+  given_by_name               String?     @db.Text
+  task_description            String?     @db.Text
+  frequency                   String?     @db.Text
+  enable_reminder             Boolean?    @default(false)
+  reminder_days_before        Int?        @default(1)
+  early_reminder_sent         Boolean?    @default(false)
+  require_attachment          Boolean?    @default(false)
+  duration                    String?     @db.Text
+  planned_date                DateTime?   @db.Timestamp()
+  task_start_date             DateTime?   @db.Timestamp()
+  submission_date             DateTime?   @db.Timestamp()
+  status                      TaskStatus? @default(pending)
+  remark                      String?     @db.Text
+  image                       String?     @db.Text
+  audio_url                   String?     @db.Text
+  instruction_attachment_url  String?     @db.Text
+  instruction_attachment_type String?     @db.Text
+  delay                       String?     @db.Text
+  admin_done                  Boolean?    @default(false)
+  admin_approved_by           BigInt?
+  admin_approval_date         DateTime?   @db.Timestamptz()
+  created_at                  DateTime    @default(now()) @db.Timestamptz()
+  firm                        Firm?       @relation(fields: [firm_id], references: [id])
+
+  @@map("checklist_task")
+}
+
+model DelegationTask {
+  task_id                     BigInt           @id @default(autoincrement())
+  firm_id                     BigInt?
+  firm_name                   String?          @db.Text
+  doer_id                     BigInt?
+  doer_name                   String?          @db.Text
+  given_by_id                 BigInt?
+  given_by_name               String?          @db.Text
+  task_description            String?          @db.Text
+  require_attachment          Boolean?         @default(false)
+  duration                    String?          @db.Text
+  task_start_date             DateTime         @db.Timestamp()
+  planned_date                DateTime?        @db.Timestamp()
+  submission_date             DateTime?        @db.Timestamp()
+  status                      TaskStatus?      @default(pending)
+  remark                      String?          @db.Text
+  image                       String?          @db.Text
+  audio_url                   String?          @db.Text
+  instruction_attachment_url  String?          @db.Text
+  instruction_attachment_type String?          @db.Text
+  delay                       String?          @db.Text
+  admin_done                  Boolean?         @default(false)
+  admin_approved_by           BigInt?
+  admin_approval_date         DateTime?        @db.Timestamptz()
+  created_at                  DateTime         @default(now()) @db.Timestamptz()
+  updated_at                  DateTime?        @updatedAt @db.Timestamptz()
+  done_history                DelegationDone[]
+  firm                        Firm?            @relation(fields: [firm_id], references: [id])
+
+  @@map("delegation_task")
+}
+
+model DelegationDone {
+  id                  BigInt          @id @default(autoincrement())
+  task_id             BigInt?
+  status              TaskStatus?
+  next_extend_date    DateTime?       @db.Timestamp()
+  reason              String?         @db.Text
+  image_url           String?         @db.Text
+  audio_url           String?         @db.Text
+  duration            String?         @db.Text
+  admin_done          Boolean?        @default(false)
+  admin_approved_by   BigInt?
+  admin_approval_date DateTime?       @db.Timestamptz()
+  created_at          DateTime        @default(now()) @db.Timestamptz()
+  task                DelegationTask? @relation(fields: [task_id], references: [task_id])
+
+  @@map("delegation_done")
+}
+
+model Holiday {
+  id           BigInt   @id @default(autoincrement())
+  holiday_date DateTime @unique @db.Date
+  holiday_name String   @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@map("holiday")
+}
+
+model WorkingDayCalendar {
+  id           BigInt   @id @default(autoincrement())
+  working_date DateTime @db.Date
+  day          String?  @db.Text
+  week_num     Int?
+  month        Int?
+
+  @@map("working_day_calendar")
+}
+
+model Vendors {
+  id           BigInt   @id @default(autoincrement())
+  vendor_name  String   @db.Text
+  gstin        String?  @db.Text
+  address      String?  @db.Text
+  email        String?  @db.Text
+  payment_term String?  @db.Text
+  person_name  String?  @db.Text
+  phone        String?  @db.Text
+  location     String?  @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+  firm_id      BigInt?
+  firm_name    String?  @db.Text
+  firm         Firm?    @relation(fields: [firm_id], references: [id])
+
+  @@map("vendors")
+}
+
+// ===================== PETTY CASH & EXPENSE SYSTEM =====================
+
+enum PettyCashEntryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PettyCashLedgerType {
+  CREDIT
+  EXPENSE
+  DEBIT
+}
+
+model Credit {
+  id            String               @id @default(cuid())
+  sn            String               @unique
+  personName    String
+  projectName   String?
+  date          DateTime             @db.Date
+  amount        Decimal              @db.Decimal(12, 2)
+  paymentMode   String
+  image         String?
+  remarks       String?
+  status        PettyCashEntryStatus @default(APPROVED)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  ledgerEntries LedgerEntry[]
+
+  @@index([personName])
+  @@map("credits")
+}
+
+model Expense {
+  id            String               @id @default(cuid())
+  sn            String               @unique
+  personName    String
+  projectName   String?
+  date          DateTime             @db.Date
+  amount        Decimal              @db.Decimal(12, 2)
+  paymentMode   String
+  groupHead     String
+  image         String?
+  remarks       String?
+  status        PettyCashEntryStatus @default(PENDING)
+  approvedBy    String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  ledgerEntries LedgerEntry[]
+
+  @@index([personName])
+  @@map("expenses")
+}
+
+model LedgerEntry {
+  id         String              @id @default(cuid())
+  personName String
+  type       PettyCashLedgerType
+  amount     Decimal             @db.Decimal(12, 2)
+  date       DateTime            @db.Date
+  balance    Decimal             @db.Decimal(12, 2)
+  createdAt  DateTime            @default(now())
+
+  creditId  String?
+  credit    Credit?  @relation(fields: [creditId], references: [id])
+  expenseId String?
+  expense   Expense? @relation(fields: [expenseId], references: [id])
+
+  @@index([personName])
+  @@map("ledger_entries")
+}
+
+model ProjectMaster {
+  id        String   @id @default(cuid())
+  type      String
+  value     String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, value])
+  @@index([type])
+  @@map("project_master")
+}
+
+model PettyCashSettings {
+  id               Int      @id @default(1)
+  paymentModes     String[] @default([])
+  lastSerialNumber Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ===================== DOC SUBMANAGER SYSTEM =====================
+
+model DocDocument {
+  id           String    @id @default(cuid())
+  sn           String    @unique
+  companyName  String
+  documentType String
+  category     String
+  documentName String
+  needsRenewal Boolean   @default(false)
+  renewalDate  DateTime? @db.Timestamptz()
+  file         String?
+  fileContent  String?
+  date         DateTime  @db.Timestamptz()
+  status       String    @default("Active")
+  createdAt    DateTime  @default(now()) @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @db.Timestamptz()
+
+  @@index([companyName])
+  @@map("doc_documents")
+}
+
+model DocRenewal {
+  id              String    @id @default(cuid())
+  documentId      String
+  sn              String
+  documentName    String
+  documentType    String
+  category        String
+  companyName     String
+  entryDate       DateTime  @db.Timestamptz()
+  oldRenewalDate  DateTime? @db.Timestamptz()
+  oldFile         String?
+  oldFileContent  String?
+  renewalStatus   String    @default("No")
+  nextRenewalDate DateTime? @db.Timestamptz()
+  newFile         String?
+  newFileContent  String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([documentId])
+  @@map("doc_renewals")
+}
+
+model DocShare {
+  id            String   @id @default(cuid())
+  shareNo       String   @unique
+  dateTime      DateTime @default(now()) @db.Timestamptz()
+  docSerial     String
+  docName       String
+  docFile       String?
+  sharedVia     String
+  recipientName String
+  contactInfo   String
+  createdAt     DateTime @default(now()) @db.Timestamptz()
+
+  @@map("doc_shares")
+}
+
+model DocSubscription {
+  id                 String    @id @default(cuid())
+  sn                 String    @unique
+  requestedDate      DateTime  @db.Timestamptz()
+  companyName        String
+  subscriberName     String
+  subscriptionName   String
+  price              String
+  frequency          String
+  purpose            String
+  startDate          DateTime? @db.Timestamptz()
+  endDate            DateTime? @db.Timestamptz()
+  status             String    @default("")
+  plan               String?
+  file               String?
+  fileContent        String?
+  approvalNo         String?
+  approvalDate       DateTime? @db.Timestamptz()
+  paymentDate        DateTime? @db.Timestamptz()
+  paymentMethod      String?
+  paymentFile        String?
+  paymentFileContent String?
+  remarks            String?
+  createdAt          DateTime  @default(now()) @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @db.Timestamptz()
+
+  @@index([companyName])
+  @@map("doc_subscriptions")
+}
+
+model DocSubscriptionRenewal {
+  id               String    @id @default(cuid())
+  subscriptionId   String
+  renewalNo        String    @unique
+  sn               String
+  companyName      String
+  subscriberName   String
+  subscriptionName String
+  frequency        String
+  price            String
+  endDate          DateTime? @db.Timestamptz()
+  renewalStatus    String    @default("")
+  createdAt        DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([subscriptionId])
+  @@map("doc_subscription_renewals")
+}
+
+model DocLoan {
+  id                        String    @id @default(cuid())
+  sn                        String    @unique
+  loanName                  String
+  bankName                  String
+  amount                    String
+  emi                       String
+  startDate                 DateTime  @db.Timestamptz()
+  endDate                   DateTime  @db.Timestamptz()
+  providedDocument          String
+  remarks                   String?
+  file                      String?
+  fileContent               String?
+  foreclosureStatus         String?
+  requestDate               DateTime? @db.Timestamptz()
+  requesterName             String?
+  documentStatus            String?
+  documentCollectionRemarks String?
+  closerRequestDate         DateTime? @db.Timestamptz()
+  collectNocStatus          String?
+  finalSettlementStatus     String?
+  nextDate                  DateTime? @db.Timestamptz()
+  settlementDate            DateTime? @db.Timestamptz()
+  createdAt                 DateTime  @default(now()) @db.Timestamptz()
+  updatedAt                 DateTime  @updatedAt @db.Timestamptz()
+
+  @@index([bankName])
+  @@map("doc_loans")
+}
+
+model DocCounter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("doc_counters")
+}
+
+enum ProjectAssignmentStatus {
+  active
+  on_leave
+  shifted
+  removed
+  completed
+}
+
+enum ProjectAssignmentEventType {
+  assigned
+  resumed
+  shifted
+  removed
+  completed
+  put_on_leave
+}
+
+model ProjectAssignment {
+  id                   BigInt                  @id @default(autoincrement())
+  employee_id          String                  @db.Text
+  firm_id              BigInt
+  firm_name            String                  @db.Text
+  role_on_project      String                  @db.Text
+  status               ProjectAssignmentStatus @default(active)
+  assigned_date        DateTime                @db.Timestamptz()
+  end_date             DateTime?               @db.Timestamptz()
+  linked_assignment_id BigInt?
+  reason               String?                 @db.Text
+  approved_by          String?                 @db.Text
+  created_at           DateTime                @default(now()) @db.Timestamptz()
+  updated_at           DateTime                @default(now()) @updatedAt @db.Timestamptz()
+
+  firm                Firm                     @relation(fields: [firm_id], references: [id])
+  employee            Employee?                @relation(fields: [employee_id], references: [employee_id])
+  linked_assignment   ProjectAssignment?       @relation("AssignmentChain", fields: [linked_assignment_id], references: [id])
+  chained_assignments ProjectAssignment[]      @relation("AssignmentChain")
+  events              ProjectAssignmentEvent[]
+
+  @@index([employee_id])
+  @@index([firm_id])
+  @@index([status])
+  @@map("project_assignments")
+}
+
+model ProjectAssignmentEvent {
+  id             BigInt                     @id @default(autoincrement())
+  assignment_id  BigInt
+  employee_id    String                     @db.Text
+  event_type     ProjectAssignmentEventType
+  from_firm_id   BigInt?
+  to_firm_id     BigInt?
+  from_firm_name String?                    @db.Text
+  to_firm_name   String?                    @db.Text
+  notes          String?                    @db.Text
+  performed_by   String?                    @db.Text
+  created_at     DateTime                   @default(now()) @db.Timestamptz()
+
+  assignment ProjectAssignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+
+  @@index([assignment_id])
+  @@index([employee_id])
+  @@map("project_assignment_events")
+}
+
+model Employee {
+  id          BigInt  @id @default(autoincrement())
+  employee_id String  @unique @default(cuid())
+  emp_code    String? @unique
+  name        String  @db.Text
+  phone       String? @db.Text
+  email       String? @db.Text
+  designation String? @db.Text
+  status      String  @default("active")
+
+  // Scoping & Relationships
+  department_id BigInt?
+  home_firm_id  BigInt?
+  user_id       BigInt? @unique
+
+  // Work & Dates (all timestamptz)
+  joining_date     DateTime? @db.Timestamptz()
+  last_working_day DateTime? @db.Timestamptz()
+  termination_date DateTime? @db.Timestamptz()
+  separation_type  String?   @db.Text
+  leaving_reason   String?   @db.Text
+  manager_name     String?   @db.Text
+  work_location    String?   @db.Text
+  employment_type  String?   @db.Text
+  joining_place    String?   @db.Text
+  attendance_mode  String?   @db.Text
+  probation_months Int?
+
+  // Financial & Compensation
+  offered_ctc      String?  @db.Text
+  monthly_salary   Decimal? @db.Decimal(12, 2)
+  bank_account     String?  @db.Text
+  ifsc_code        String?  @db.Text
+  bank_branch_name String?  @db.Text
+  payment_mode     String?  @db.Text
+  pf_eligible      Boolean? @default(false)
+  esic_eligible    Boolean? @default(false)
+  past_pf_no       String?  @db.Text
+  esic_no          String?  @db.Text
+
+  // Personal Details & Identification
+  blood_group           String? @db.Text
+  father_name           String? @db.Text
+  highest_qualification String? @db.Text
+  current_address       String? @db.Text
+  aadhar_address        String? @db.Text
+  aadhar_no             String? @db.Text
+
+  // Emergency Contact
+  emergency_contact_name     String? @db.Text
+  emergency_contact_phone    String? @db.Text
+  emergency_contact_relation String? @db.Text
+
+  // Asset Issuance Flags
+  email_to_be_issued  Boolean? @default(false)
+  mobile_to_be_issued Boolean? @default(false)
+  laptop_to_be_issued Boolean? @default(false)
+
+  // Candidate link & Onboarding / Separation Flags
+  candidate_id           BigInt?  @unique
+  salary_on_hold         Boolean? @default(false)
+  salary_hold_reason     String?  @db.Text
+  offer_letter_issued    Boolean? @default(false)
+  id_card_issued         Boolean? @default(false)
+  induction_done         Boolean? @default(false)
+  onboarding_checklist   Json?
+  exit_checklist         Json?
+  custom_checklist_items Json?
+
+  // Timestamps
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  // Relations
+  user                User?               @relation(fields: [user_id], references: [id])
+  department          Department?         @relation(fields: [department_id], references: [id])
+  home_firm           Firm?               @relation("EmployeeHomeFirm", fields: [home_firm_id], references: [id])
+  project_assignments ProjectAssignment[]
+  candidate           HrCandidate?        @relation(fields: [candidate_id], references: [id])
+  joining             HrJoining?
+  attendances         HrAttendance[]
+  attendance_claims   HrAttendanceClaim[]
+  attendance_punches  HrAttendancePunch[]
+  leaves              HrLeave[]
+  gate_passes         HrGatePass[]
+  advance_requests    HrAdvanceRequest[]
+  loans               HrEmployeeLoan[]
+  salary_structure    HrSalaryStructure?
+  payslips            HrPayslip[]
+
+  @@index([status])
+  @@index([home_firm_id])
+  @@index([department_id])
+  @@index([phone])
+  @@map("employee")
+}
+
+model HrCandidate {
+  id                   BigInt     @id @default(autoincrement())
+  candidate_enquiry_no String     @unique
+  candidate_name       String     @db.Text
+  dob                  DateTime?  @db.Timestamptz()
+  phone_no             String     @db.Text
+  email                String?    @db.Text
+  previous_company     String?    @db.Text
+  experience           String?    @db.Text
+  previous_position    String?    @db.Text
+  marital_status       String?    @db.Text
+  aadhar_no            String?    @db.Text
+  last_salary          String?    @db.Text
+  reason_for_leaving   String?    @db.Text
+  current_address      String?    @db.Text
+  photo                String?    @db.Text
+  resume               String?    @db.Text
+  status               String     @default("pending")
+  indent_id            String?    @db.Text
+  notes                String?    @db.Text
+  next_call_date       DateTime?  @db.Timestamptz()
+  follow_up_notes      String?    @db.Text
+  call_logs            Json?      @default("[]")
+  documents            Json?      @default("{}")
+  created_at           DateTime   @default(now()) @db.Timestamptz()
+  updated_at           DateTime   @default(now()) @updatedAt @db.Timestamptz()
+  joining              HrJoining?
+  employee             Employee?
+
+  @@index([status])
+  @@index([phone_no])
+  @@index([candidate_enquiry_no])
+  @@map("hr_candidate")
+}
+
+model HrJoining {
+  id                         BigInt   @id @default(autoincrement())
+  candidate_id               BigInt?  @unique
+  employee_id                String?  @unique
+  joining_date               DateTime @db.Timestamptz()
+  status                     String   @default("pending")
+  father_name                String?  @db.Text
+  highest_qualification      String?  @db.Text
+  current_address            String?  @db.Text
+  aadhar_address             String?  @db.Text
+  aadhar_no                  String?  @db.Text
+  employment_type            String?  @db.Text
+  designation_offered        String?  @db.Text
+  company_name               String?  @db.Text
+  joining_place              String?  @db.Text
+  attendance_mode            String?  @db.Text
+  offered_ctc                String?  @db.Text
+  monthly_salary             Decimal? @db.Decimal(12, 2)
+  probation_months           Int?     @default(3)
+  reporting_manager          String?  @db.Text
+  work_location              String?  @db.Text
+  bank_account               String?  @db.Text
+  bank_branch_name           String?  @db.Text
+  ifsc_code                  String?  @db.Text
+  payment_mode               String?  @db.Text
+  emergency_contact_name     String?  @db.Text
+  emergency_contact_phone    String?  @db.Text
+  emergency_contact_relation String?  @db.Text
+  email_to_be_issued         Boolean? @default(false)
+  mobile_to_be_issued        Boolean? @default(false)
+  laptop_to_be_issued        Boolean? @default(false)
+  pf_eligible                Boolean? @default(false)
+  esic_eligible              Boolean? @default(false)
+  past_pf_no                 String?  @db.Text
+  esic_no                    String?  @db.Text
+  documents                  Json?    @default("{}")
+  created_at                 DateTime @default(now()) @db.Timestamptz()
+  updated_at                 DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  candidate HrCandidate? @relation(fields: [candidate_id], references: [id])
+  employee  Employee?    @relation(fields: [employee_id], references: [employee_id])
+
+  @@map("hr_joining")
+}
+
+model HrAttendance {
+  id            BigInt   @id @default(autoincrement())
+  employee_id   String   @db.Text
+  date          String   @db.Text // YYYY-MM-DD
+  shift_id      String?  @db.Text
+  check_in      String?  @db.Text // HH:MM
+  check_out     String?  @db.Text // HH:MM
+  status        String   @default("present")
+  working_hours Decimal  @default(0) @db.Decimal(5, 2)
+  overtime      Decimal  @default(0) @db.Decimal(5, 2)
+  notes         String?  @db.Text
+  created_at    DateTime @default(now()) @db.Timestamptz()
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@unique([employee_id, date])
+  @@index([employee_id])
+  @@index([date])
+  @@map("hr_attendance")
+}
+
+// One row per attendance photo submitted by an incharge on an employee's
+// behalf (see AttendanceController.submitPunch) — kept as a permanent,
+// append-only log distinct from HrAttendance's one-row-per-day summary so
+// an 'in' punch's photo/location is never overwritten by a later 'out'.
+model HrAttendancePunch {
+  id           String   @id @default(cuid())
+  employee_id  String   @db.Text
+  date         String   @db.Text // YYYY-MM-DD
+  punch_type   String   @db.Text // in | out | half_day | full_day
+  punch_time   String   @db.Text // HH:MM
+  photo_url    String   @db.Text
+  latitude     Decimal  @db.Decimal(9, 6)
+  longitude    Decimal  @db.Decimal(9, 6)
+  submitted_by String?  @db.Text // name/id of the incharge who submitted this
+  notes        String?  @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([date])
+  @@map("hr_attendance_punch")
+}
+
+model HrAttendanceClaim {
+  id             BigInt    @id @default(autoincrement())
+  employee_id    String    @db.Text
+  date           String    @db.Text // YYYY-MM-DD
+  claim_type     String    @db.Text // PUNCH_MIS, OVERTIME, WEEKEND_PRESENT
+  check_in       String?   @db.Text
+  check_out      String?   @db.Text
+  overtime_hours Decimal?  @db.Decimal(5, 2)
+  reason         String    @db.Text
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewed_by    String?   @db.Text
+  review_note    String?   @db.Text
+  reviewed_at    DateTime? @db.Timestamptz()
+  created_at     DateTime  @default(now()) @db.Timestamptz()
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@index([date])
+  @@map("hr_attendance_claim")
+}
+
+model HrAttendanceConfig {
+  id                 BigInt   @id @default(autoincrement())
+  full_day_hours     Decimal  @default(9) @db.Decimal(5, 2)
+  half_day_min_hours Decimal  @default(4) @db.Decimal(5, 2)
+  late_grace_minutes Int      @default(15)
+  created_at         DateTime @default(now()) @db.Timestamptz()
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("hr_attendance_config")
+}
+
+model HrLeave {
+  id                   BigInt    @id @default(autoincrement())
+  employee_id          String    @db.Text
+  employee_name        String    @db.Text
+  department_id        BigInt?
+  hod_id               String?   @db.Text
+  hod_name             String?   @db.Text
+  substitute           String?   @db.Text
+  leave_type           String?   @db.Text
+  from_date            DateTime  @db.Timestamptz()
+  to_date              DateTime  @db.Timestamptz()
+  days                 Decimal?  @db.Decimal(4, 1)
+  leave_days           Json?
+  reason               String    @db.Text
+  status               String    @default("pending") // pending, approved, rejected
+  submitted_by         String?   @db.Text
+  approved_by          String?   @db.Text
+  approved_date        DateTime? @db.Timestamptz()
+  remarks              String?   @db.Text
+  task_transfer_status String?   @db.Text
+  created_at           DateTime  @default(now()) @db.Timestamptz()
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@index([from_date, to_date])
+  @@map("hr_leave")
+}
+
+model HrGatePass {
+  id               BigInt   @id @default(autoincrement())
+  employee_id      String   @db.Text
+  employee_name    String?  @db.Text
+  emp_code         String?  @db.Text
+  department_name  String?  @db.Text
+  type             String   @default("Official") @db.Text // Official, Personal
+  place_to_visit   String   @db.Text
+  reason           String   @db.Text
+  departure_time   DateTime @db.Timestamptz()
+  expected_arrival DateTime @db.Timestamptz()
+  out_time         String?  @db.Text
+  in_time          String?  @db.Text
+  status           String   @default("open") @db.Text // open, out, closed, rejected, pending
+  approved_by      String?  @db.Text
+  whatsapp_no      String?  @db.Text
+  attachment       String?  @db.Text
+  security_logs    Json?    @default("[]")
+  created_at       DateTime @default(now()) @db.Timestamptz()
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@map("hr_gate_pass")
+}
+
+model HrAdvanceRequest {
+  id                         BigInt    @id @default(autoincrement())
+  employee_id                String    @db.Text
+  employee_name              String    @db.Text
+  emp_code                   String?   @db.Text
+  department_name            String?   @db.Text
+  request_amount             Decimal   @db.Decimal(12, 2)
+  monthly_deduction          Decimal   @db.Decimal(12, 2)
+  no_of_months               Int
+  reason                     String    @db.Text
+  status                     String    @default("pending") // pending, approved, rejected, completed
+  remarks                    String?   @db.Text
+  approved_amount            Decimal?  @db.Decimal(12, 2)
+  approved_monthly_deduction Decimal?  @db.Decimal(12, 2)
+  approved_no_of_months      Int?
+  request_date               DateTime  @default(now()) @db.Timestamptz()
+  approved_date              DateTime? @db.Timestamptz()
+  start_deduction_month      String?   @db.Text // YYYY-MM
+  loan_id                    String?   @db.Text
+  created_at                 DateTime  @default(now()) @db.Timestamptz()
+  updated_at                 DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@map("hr_advance_request")
+}
+
+model HrEmployeeLoan {
+  id                  String   @id @default(cuid())
+  employee_id         String   @db.Text
+  amount              Decimal  @db.Decimal(12, 2)
+  emi_amount          Decimal  @db.Decimal(12, 2)
+  outstanding_balance Decimal  @db.Decimal(12, 2)
+  purpose             String?  @db.Text
+  start_date          DateTime @default(now()) @db.Timestamptz()
+  status              String   @default("active") // active, settled
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@index([employee_id])
+  @@index([status])
+  @@map("hr_employee_loan")
+}
+
+model HrSalaryStructure {
+  id                        BigInt   @id @default(autoincrement())
+  employee_id               String   @unique @db.Text
+  basic_percent             Decimal  @default(40) @db.Decimal(5, 2)
+  hra_percent               Decimal  @default(20) @db.Decimal(5, 2)
+  conveyance_percent        Decimal  @default(10) @db.Decimal(5, 2)
+  medical_percent           Decimal  @default(5) @db.Decimal(5, 2)
+  special_allowance_percent Decimal  @default(25) @db.Decimal(5, 2)
+  deductions                Json?    @default("[]")
+  created_at                DateTime @default(now()) @db.Timestamptz()
+  updated_at                DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@map("hr_salary_structure")
+}
+
+model HrPayslip {
+  id                 BigInt    @id @default(autoincrement())
+  employee_id        String    @db.Text
+  month              Int
+  year               Int
+  total_working_days Decimal   @default(30) @db.Decimal(5, 2)
+  present_days       Decimal   @default(0) @db.Decimal(5, 2)
+  leave_days         Decimal   @default(0) @db.Decimal(5, 2)
+  overtime_hours     Decimal   @default(0) @db.Decimal(5, 2)
+  overtime_pay       Decimal   @default(0) @db.Decimal(12, 2)
+  gross_salary       Decimal   @default(0) @db.Decimal(12, 2)
+  total_deductions   Decimal   @default(0) @db.Decimal(12, 2)
+  loan_deduction     Decimal   @default(0) @db.Decimal(12, 2)
+  net_salary         Decimal   @default(0) @db.Decimal(12, 2)
+  status             String    @default("pending") // pending, paid
+  paid_date          DateTime? @db.Timestamptz()
+
+  // Salary structure breakdown (earned amounts, prorated by attendance)
+  structure_id        BigInt?
+  monthly_ctc         Decimal @default(0) @db.Decimal(12, 2)
+  calculation_days    Decimal @default(0) @db.Decimal(5, 2)
+  basic               Decimal @default(0) @db.Decimal(12, 2)
+  hra                 Decimal @default(0) @db.Decimal(12, 2)
+  conveyance          Decimal @default(0) @db.Decimal(12, 2)
+  medical_allowance   Decimal @default(0) @db.Decimal(12, 2)
+  special_allowance   Decimal @default(0) @db.Decimal(12, 2)
+  other_allowances    Decimal @default(0) @db.Decimal(12, 2)
+  additional_salary   Decimal @default(0) @db.Decimal(12, 2)
+  employer_pf         Decimal @default(0) @db.Decimal(12, 2)
+  employer_esic       Decimal @default(0) @db.Decimal(12, 2)
+  deduction_breakdown Json?   @default("[]")
+
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  employee Employee? @relation(fields: [employee_id], references: [employee_id])
+
+  @@unique([employee_id, month, year])
+  @@index([employee_id])
+  @@index([month, year])
+  @@map("hr_payslip")
+}
+
+model HrPayPolicy {
+  id                          BigInt   @id @default(autoincrement())
+  ot_enabled                  Boolean  @default(true)
+  ot_mode                     String   @default("PAY") // PAY, COMP_OFF
+  standard_shift_hours        Decimal  @default(8) @db.Decimal(5, 2)
+  overtime_rate_multiplier    Decimal  @default(1.5) @db.Decimal(5, 2)
+  weekend_ot_multiplier       Decimal  @default(1.5) @db.Decimal(5, 2)
+  holiday_ot_multiplier       Decimal  @default(2.0) @db.Decimal(5, 2)
+  weekend_work_multiplier     Decimal  @default(1.5) @db.Decimal(5, 2)
+  holiday_work_multiplier     Decimal  @default(2.0) @db.Decimal(5, 2)
+  late_grace_minutes          Int      @default(15)
+  late_deduct_type            String   @default("NONE") // PER_MINUTE, HALF_DAY, NONE
+  half_day_after_late_minutes Int      @default(120)
+  punch_mis_treatment         String   @default("HALF_DAY") // ABSENT, HALF_DAY, PRESENT
+  pf_enabled                  Boolean  @default(true)
+  pf_employee_rate            Decimal  @default(12) @db.Decimal(5, 2)
+  pf_employer_rate            Decimal  @default(12) @db.Decimal(5, 2)
+  esi_enabled                 Boolean  @default(true)
+  esi_employee_rate           Decimal  @default(0.75) @db.Decimal(5, 2)
+  esi_employer_rate           Decimal  @default(3.25) @db.Decimal(5, 2)
+  esi_gross_limit             Decimal  @default(21000) @db.Decimal(12, 2)
+  professional_tax_enabled    Boolean  @default(false)
+  created_at                  DateTime @default(now()) @db.Timestamptz()
+  updated_at                  DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("hr_pay_policy")
+}
+
+model HrLetterTemplate {
+  id           BigInt               @id @default(autoincrement())
+  name         String               @db.Text
+  letter_type  String               @db.Text // OFFER, EXPERIENCE, JOINING
+  content      String               @db.Text
+  is_default   Boolean              @default(false)
+  is_active    Boolean              @default(true)
+  fields       Json?                @default("[]")
+  created_at   DateTime             @default(now()) @db.Timestamptz()
+  updated_at   DateTime             @default(now()) @updatedAt @db.Timestamptz()
+  field_values HrLetterFieldValue[]
+
+  @@index([letter_type])
+  @@map("hr_letter_template")
+}
+
+model HrLetterFieldValue {
+  id          BigInt   @id @default(autoincrement())
+  template_id BigInt
+  field_key   String   @db.Text
+  value       String   @db.Text
+  employee_id String   @default("") @db.Text // "" = global, or specific employee_id
+  created_at  DateTime @default(now()) @db.Timestamptz()
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  template HrLetterTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@unique([template_id, field_key, employee_id])
+  @@index([template_id])
+  @@map("hr_letter_field_value")
+}
+
+model HrAuditEvent {
+  id           BigInt   @id @default(autoincrement())
+  entity_type  String   @db.Text // candidate, joining, attendance, leave, gatepass, advance, separation
+  entity_id    String   @db.Text
+  event_type   String   @db.Text
+  performed_by String?  @db.Text
+  notes        String?  @db.Text
+  metadata     Json?
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([entity_type, entity_id])
+  @@index([event_type])
+  @@map("hr_audit_event")
+}
+
+model HrConfig {
+  key        String   @id @db.Text
+  value      Json
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("hr_config")
+}
+
+model HrSocialAccount {
+  id                BigInt  @id @default(autoincrement())
+  platform          String  @unique @db.Text // LinkedIn, Facebook, Twitter, Instagram, YouTube
+  handle            String  @db.Text
+  profile_url       String? @db.Text
+  status            String  @default("connected") // connected, disconnected
+  auto_publish_jobs Boolean @default(true)
+  track_referrals   Boolean @default(true)
+
+  // Denormalized current stats, kept in sync by the /sync endpoint
+  followers_num   Int       @default(0)
+  growth_percent  Decimal   @default(0) @db.Decimal(6, 2)
+  impressions_30d Int       @default(0)
+  engagement_rate Decimal   @default(0) @db.Decimal(5, 2)
+  job_clicks_30d  Int       @default(0)
+  applicants_30d  Int       @default(0)
+  last_synced_at  DateTime? @db.Timestamptz()
+
+  connected_at DateTime @default(now()) @db.Timestamptz()
+  created_at   DateTime @default(now()) @db.Timestamptz()
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  posts     HrSocialPost[]
+  snapshots HrSocialAnalyticsSnapshot[]
+
+  @@index([status])
+  @@map("hr_social_account")
+}
+
+model HrSocialPost {
+  id           BigInt   @id @default(autoincrement())
+  account_id   BigInt
+  title        String   @db.Text
+  type         String   @default("announcement") // job, announcement
+  indent_id    String?  @db.Text // loose reference — indents live in hr_indents.json, not Postgres
+  published_at DateTime @db.Timestamptz()
+  views        Int      @default(0)
+  clicks       Int      @default(0)
+  applies      Int?
+  likes        Int      @default(0)
+  created_at   DateTime @default(now()) @db.Timestamptz()
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  account HrSocialAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("hr_social_post")
+}
+
+model HrSocialAnalyticsSnapshot {
+  id              BigInt   @id @default(autoincrement())
+  account_id      BigInt
+  followers_num   Int
+  impressions_30d Int
+  engagement_rate Decimal  @db.Decimal(5, 2)
+  job_clicks_30d  Int
+  applicants_30d  Int
+  growth_percent  Decimal  @db.Decimal(6, 2) // vs previous snapshot, computed at insert time
+  recorded_at     DateTime @default(now()) @db.Timestamptz()
+  recorded_by     String?  @db.Text
+
+  account HrSocialAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("hr_social_analytics_snapshot")
+}
+
+// ===================== ASSET / MAINTENANCE / REPAIR SYSTEM =====================
+// See ASSET_MAINTENANCE_REPAIR_SCHEMA_ARCHITECTURE.md (repo root /md) for the full
+// entity-relationship diagram, the rationale behind each design decision below, and
+// the service-layer cascade rules these models replace fuzzy frontend string-matching
+// with. Convention: new models use String cuid() ids / camelCase fields / createdAt
+// timestamps (matching Petty Cash & Doc Sub-Manager), FK into the existing Firm /
+// Department / Employee / User models rather than inventing parallel ones.
+
+enum AssetStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_REPAIR
+  DISPOSED
+}
+
+enum AssetCategory {
+  IT
+  ELECTRONICS
+  FURNITURE
+  MACHINERY
+  TOOLS
+  VEHICLE
+}
+
+enum AssetType {
+  ASSET
+  NON_CONSUMABLE
+  CONSUMABLE
+}
+
+enum DepreciationMethod {
+  STRAIGHT_LINE
+  WDV
+}
+
+// Replaces three inconsistent priority<->number mappings found across the frontend
+// (plansApi.ts, dashboardApi.ts, unique_task's edit-priority options all disagreed
+// on what 1/2/3/4 meant) with one explicit enum.
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MachineStatus {
+  OPERATIONAL
+  UNDER_MAINTENANCE
+  BREAKDOWN
+  IDLE
+  DECOMMISSIONED
+}
+
+enum MachineCategory {
+  PRODUCTION
+  UTILITY
+  MATERIAL_HANDLING
+  HVAC
+  ELECTRICAL
+  INSTRUMENTATION
+  SAFETY
+  FACILITY
+}
+
+enum PlanFrequency {
+  ONE_TIME
+  DAILY
+  WEEKLY
+  FORTNIGHTLY
+  ALTERNATE_DAYS
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+  IN_FIRST_WEEK
+  IN_SECOND_WEEK
+  IN_THIRD_WEEK
+  IN_FOURTH_WEEK
+  RUNNING_HOURS
+  METER_BASED
+}
+
+enum PlanHolidayAction {
+  KEEP
+  SKIP
+  SHIFT_NEXT
+  SHIFT_PREV
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum WorkOrderStatus {
+  PENDING
+  IN_PROGRESS
+  PENDING_APPROVAL
+  COMPLETED
+  COMPLETED_LATE
+  COMPLETION_REJECTED
+  OVERDUE
+  ON_LEAVE
+  MISSED
+  SKIPPED
+  CANCELLED
+  ON_HOLD
+}
+
+enum WorkOrderType {
+  SCHEDULED
+  BREAKDOWN
+  ONE_TIME
+  REPAIR
+}
+
+enum TransferType {
+  OCCURRENCE_TRANSFER
+  PERMANENT_TRANSFER
+  TEMPORARY_COVER
+}
+
+// Shared PENDING/APPROVED/REJECTED decision status — used by work-order approval
+// requests and transfer requests alike.
+enum ApprovalDecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BreakdownSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum BreakdownStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum RepairIndentStatus {
+  PENDING
+  ASSIGNED
+  SENT_FOR_REPAIR
+  STORE_IN
+  COMPLETED
+  PAYMENT_DONE
+}
+
+// Split out of the frontend's overloaded `approvalStatus` field, which mixed an
+// approve/reject decision with an inhouse/outhouse routing choice.
+enum RepairRoutingType {
+  INHOUSE
+  OUTHOUSE
+}
+
+enum InspectionResult {
+  PASS
+  FAIL
+  PENDING
+}
+
+enum StoreInStatus {
+  PENDING_VERIFICATION
+  APPROVED
+  REJECTED
+}
+
+enum RepairPaymentMode {
+  ONLINE_TRANSFER
+  CHEQUE
+  CASH
+}
+
+enum RepairPaymentStatus {
+  FULLY_PAID
+  PARTIAL
+  PENDING_APPROVAL
+}
+
+enum AMCStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+}
+
+// ----- Asset Management -----
+
+model Asset {
+  id                String        @id @default(cuid())
+  firmId            BigInt?
+  assetCode         String        @unique // stable internal code ("SN-0001"); generated via DocumentSequence, immutable after creation — this (or `id`) is the only field other systems should FK against, never `serialNo`/`productName`
+  productName       String
+  category          AssetCategory
+  type              AssetType
+  brand             String?
+  model             String?
+  serialNo          String? // manufacturer serial — free text, display-only, NOT used for cross-system matching
+  sku               String?
+  mfgDate           DateTime?
+  origin            String?
+  status            AssetStatus   @default(ACTIVE)
+  assetDate         DateTime      @default(now())
+  invoiceNo         String?
+  cost              Decimal?      @db.Decimal(14, 2)
+  quantity          Int           @default(1)
+  supplierName      String?
+  supplierPhone     String?
+  paymentMode       String?
+  location          String?
+  department        String? // free text — the frontend has no department picker for assets, just a text input; not FK'd to Department (contrast with Machine/RepairIndent, which do use a real departmentId once those modules get their own picker UI)
+  assignedTo        String? // free text — no employee picker in the Asset UI; see `department` note above
+  responsiblePerson String? // free text — same as `assignedTo`
+  warrantyAvailable Boolean       @default(false)
+  warrantyEnd       DateTime?
+  amcActive         Boolean       @default(false)
+  amcEnd            DateTime?
+
+  // --- Maintenance rollup cache: written by the maintenance service on WorkOrder
+  // completion / MaintenancePlan creation. NOT the source of truth — Machine's own
+  // plans/work orders are — see "Service-layer responsibilities" in the arch doc.
+  maintenanceRequired Boolean        @default(false)
+  maintenanceType     String?
+  frequency           PlanFrequency?
+  maintenanceCount    Int            @default(0)
+  lastMaintenanceDate DateTime?
+  nextService         DateTime?
+  priority            Priority?
+
+  // --- Repair rollup cache: written by the repair service on RepairIndent
+  // completion. NOT the source of truth — RepairIndent rows are.
+  repairCount     Int       @default(0)
+  lastRepairDate  DateTime?
+  lastRepairCost  Decimal?  @db.Decimal(14, 2) // cost of the most recent repair only — the frontend mock misleadingly called this `repairCost`
+  totalRepairCost Decimal   @default(0) @db.Decimal(14, 2)
+  partsChanged    Boolean   @default(false)
+
+  assetValue  Decimal?            @db.Decimal(14, 2)
+  depMethod   DepreciationMethod?
+  createdById BigInt?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  firm          Firm?          @relation(fields: [firmId], references: [id])
+  createdBy     User?          @relation(fields: [createdById], references: [id])
+  machine       Machine?
+  repairIndents RepairIndent[]
+  amcContracts  AMCContract[]
+
+  ownershipType OwnershipType @default(OWNED)
+
+  @@index([firmId, ownershipType])
+
+  @@index([firmId])
+  @@index([status])
+  @@map("assets")
+}
+
+// ----- Maintenance -----
+
+model Machine {
+  id               String          @id @default(cuid())
+  firmId           BigInt?
+  assetId          String?         @unique // 1:1 with Asset — nullable because not every asset is maintenance-tracked
+  departmentId     BigInt?
+  name             String
+  assetCode        String          @unique // display code, copied from Asset.assetCode at creation time
+  qrCode           String?
+  serialNumber     String?
+  modelNumber      String?
+  manufacturer     String?
+  supplier         String?
+  category         MachineCategory
+  subCategory      String?
+  criticalityLevel Int             @default(1)
+  location         String?
+  locationCode     String?
+  purchaseDate     DateTime?
+  purchasePrice    Decimal?        @db.Decimal(14, 2)
+  installationDate DateTime?
+  warrantyExpiry   DateTime?
+  status           MachineStatus   @default(OPERATIONAL)
+  statusChangedAt  DateTime?
+  runningHours     Decimal         @default(0) @db.Decimal(12, 2)
+  specifications   Json?
+  isActive         Boolean         @default(true)
+  imageUrl         String?
+  documentUrls     String[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  firm             Firm?                  @relation(fields: [firmId], references: [id])
+  asset            Asset?                 @relation(fields: [assetId], references: [id])
+  department       Department?            @relation(fields: [departmentId], references: [id])
+  parts            MachinePart[]
+  maintenancePlans MaintenancePlan[]
+  workOrders       MaintenanceWorkOrder[]
+  breakdownReports BreakdownReport[]
+  dailyLogs        DailyMachineLog[]
+  repairIndents    RepairIndent[]
+  amcContracts     AMCContract[]
+
+  ownershipType       OwnershipType @default(OWNED)
+  equipmentType       EquipmentType @default(OTHER)
+  readingUnit         ReadingUnit   @default(HOURS)
+  openingReading      Decimal       @default(0) @db.Decimal(12, 2)
+  expectedConsumption Decimal?      @db.Decimal(8, 3)
+  maxUsagePerEntry    Decimal?      @db.Decimal(10, 2)
+  registrationNo      String?
+  siteLocationId      BigInt?
+  rentalStartAt       DateTime?     @db.Timestamptz(3)
+  rentalEndAt         DateTime?     @db.Timestamptz(3)
+  rentalVendorId      String?
+  rentalVendorName    String?
+  hireType            HireType?
+
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  rentalVendor RepairVendor?        @relation("MachineRentalVendor", fields: [rentalVendorId], references: [id])
+  usageLogs    MachineUsageLog[]
+  dieselLogs   DieselLog[]
+
+  @@index([firmId, ownershipType])
+
+  @@index([firmId])
+  @@index([status])
+  @@map("machines")
+}
+
+model MachinePart {
+  id          String   @id @default(cuid())
+  machineId   String
+  name        String
+  partNumber  String?
+  description String?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  machine          Machine                @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  maintenancePlans MaintenancePlan[]
+  workOrders       MaintenanceWorkOrder[]
+  repairIndents    RepairIndent[]
+
+  @@index([machineId])
+  @@map("machine_parts")
+}
+
+model ActivityType {
+  id        String   @id @default(cuid())
+  firmId    BigInt?
+  name      String
+  code      String?
+  isSystem  Boolean  @default(false) // seeded/non-deletable system row vs firm-custom
+  createdAt DateTime @default(now())
+
+  firm  Firm?             @relation(fields: [firmId], references: [id])
+  plans MaintenancePlan[]
+
+  workOrders MaintenanceWorkOrder[]
+
+  @@index([firmId])
+  @@map("activity_types")
+}
+
+model MaintenancePlan {
+  id                String            @id @default(cuid())
+  firmId            BigInt?
+  planCode          String?           @unique
+  machineId         String
+  activityTypeId    String?
+  machinePartId     String?
+  title             String
+  description       String?
+  documentUrl       String?
+  frequency         PlanFrequency
+  status            PlanStatus        @default(DRAFT)
+  priority          Priority          @default(MEDIUM)
+  estimatedMinutes  Int?
+  onHoliday         PlanHolidayAction @default(SHIFT_NEXT)
+  startDate         DateTime
+  endDate           DateTime?
+  triggerAfterHours Decimal?          @db.Decimal(10, 2) // RUNNING_HOURS frequency
+  toleranceHours    Decimal?          @db.Decimal(10, 2)
+  triggerAfterUnits Decimal?          @db.Decimal(10, 2) // METER_BASED frequency
+  toleranceUnits    Decimal?          @db.Decimal(10, 2)
+  assignedToUserId  BigInt?
+  createdById       BigInt?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  firm         Firm?                  @relation(fields: [firmId], references: [id])
+  machine      Machine                @relation(fields: [machineId], references: [id])
+  activityType ActivityType?          @relation(fields: [activityTypeId], references: [id])
+  machinePart  MachinePart?           @relation(fields: [machinePartId], references: [id])
+  assignedTo   User?                  @relation("PlanAssignedTo", fields: [assignedToUserId], references: [id])
+  createdBy    User?                  @relation("PlanCreatedBy", fields: [createdById], references: [id])
+  workOrders   MaintenanceWorkOrder[]
+
+  @@index([machineId])
+  @@index([firmId])
+  @@map("maintenance_plans")
+}
+
+model MaintenanceWorkOrder {
+  id                    String          @id @default(cuid())
+  firmId                BigInt?
+  workOrderCode         String?         @unique
+  planId                String? // null for BREAKDOWN/ONE_TIME/REPAIR work orders
+  machineId             String
+  machinePartId         String?
+  breakdownReportId     String?         @unique // set when type = BREAKDOWN
+  currentAssigneeUserId BigInt?
+  completedByUserId     BigInt?
+  type                  WorkOrderType
+  status                WorkOrderStatus @default(PENDING)
+  priority              Priority        @default(MEDIUM)
+  scheduledDate         DateTime?
+  actualDueDate         DateTime
+  wasShifted            Boolean         @default(false)
+  startedAt             DateTime?
+  completedAt           DateTime?
+  skipReason            String?
+  cancelReason          String?
+  completionNote        String?
+  actualMinutesTaken    Int?
+  slaBreach             Boolean         @default(false)
+  escalationLevel       Int             @default(0)
+  cost                  Decimal?        @db.Decimal(12, 2) // set by processRepair's billAmount — backs the cost-analysis report
+  photoUrl              String? // presigned-S3 URL of the work photo attached via processRepair
+  billUrl               String? // presigned-S3 URL of the bill copy attached via processRepair
+  typeOfWork            String? // in_house or out_source set via processRepair
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  firm             Firm?                      @relation(fields: [firmId], references: [id])
+  plan             MaintenancePlan?           @relation(fields: [planId], references: [id])
+  machine          Machine                    @relation(fields: [machineId], references: [id])
+  machinePart      MachinePart?               @relation(fields: [machinePartId], references: [id])
+  breakdownReport  BreakdownReport?           @relation(fields: [breakdownReportId], references: [id])
+  currentAssignee  User?                      @relation("WorkOrderCurrentAssignee", fields: [currentAssigneeUserId], references: [id])
+  completedBy      User?                      @relation("WorkOrderCompletedBy", fields: [completedByUserId], references: [id])
+  checklistItems   WorkOrderChecklistItem[]
+  replacementParts WorkOrderReplacementPart[]
+  repairParts      WorkOrderRepairPart[]
+  approvalRequests WorkOrderApprovalRequest[]
+  transfers        WorkOrderTransfer[]
+  statusLogs       WorkOrderStatusLog[]
+  repairIndents    RepairIndent[]
+
+  title           String?
+  description     String?
+  activityTypeId  String?
+  documentUrl     String?
+  requestedById   BigInt?
+  outsourceStatus OutsourceStatus?
+  vendorId        String?
+  sentAt          DateTime?        @db.Timestamptz(3)
+  receivedAt      DateTime?        @db.Timestamptz(3)
+  paidAt          DateTime?        @db.Timestamptz(3)
+  billNo          String?
+  rollupAppliedAt DateTime?        @db.Timestamptz(3)
+
+  activityType ActivityType? @relation(fields: [activityTypeId], references: [id])
+  requestedBy  User?         @relation("WorkOrderRequestedBy", fields: [requestedById], references: [id])
+  vendor       RepairVendor? @relation("WorkOrderVendor", fields: [vendorId], references: [id])
+
+  @@index([outsourceStatus])
+
+  @@index([machineId])
+  @@index([firmId])
+  @@index([status])
+  @@map("maintenance_work_orders")
+}
+
+// Structured replacement for the frontend's untyped `checklistResponses` JSON blob.
+model WorkOrderChecklistItem {
+  id          String  @id @default(cuid())
+  workOrderId String
+  text        String
+  done        Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@map("work_order_checklist_items")
+}
+
+model WorkOrderReplacementPart {
+  id          String   @id @default(cuid())
+  workOrderId String
+  name        String
+  quantity    Int      @default(1)
+  cost        Decimal? @db.Decimal(12, 2)
+
+  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@map("work_order_replacement_parts")
+}
+
+// Parts consumed during a maintenance-side repair (WorkOrder.type = REPAIR/BREAKDOWN).
+// Also what Asset.partsChanged/totalRepairCost should be derived from instead of the
+// frontend's deduped `partNames: string[]` array.
+model WorkOrderRepairPart {
+  id               String    @id @default(cuid())
+  workOrderId      String
+  partName         String
+  quantity         Int       @default(1)
+  vendorName       String?
+  warrantyFromDate DateTime?
+  warrantyToDate   DateTime?
+
+  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@map("work_order_repair_parts")
+}
+
+model WorkOrderApprovalRequest {
+  id                String                 @id @default(cuid())
+  workOrderId       String
+  status            ApprovalDecisionStatus @default(PENDING)
+  submissionNote    String?
+  submittedByUserId BigInt?
+  requestedAt       DateTime               @default(now())
+  reviewedAt        DateTime?
+  reviewNote        String?
+  reviewedByUserId  BigInt?
+
+  workOrder   MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  submittedBy User?                @relation("ApprovalSubmittedBy", fields: [submittedByUserId], references: [id])
+  reviewedBy  User?                @relation("ApprovalReviewedBy", fields: [reviewedByUserId], references: [id])
+
+  @@index([workOrderId])
+  @@map("work_order_approval_requests")
+}
+
+model WorkOrderTransfer {
+  id          String                 @id @default(cuid())
+  workOrderId String
+  fromUserId  BigInt?
+  toUserId    BigInt
+  type        TransferType
+  status      ApprovalDecisionStatus @default(PENDING)
+  reason      String?
+  createdAt   DateTime               @default(now())
+
+  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  fromUser  User?                @relation("TransferFromUser", fields: [fromUserId], references: [id])
+  toUser    User                 @relation("TransferToUser", fields: [toUserId], references: [id])
+
+  @@index([workOrderId])
+  @@map("work_order_transfers")
+}
+
+model WorkOrderStatusLog {
+  id              String           @id @default(cuid())
+  workOrderId     String
+  fromStatus      WorkOrderStatus?
+  toStatus        WorkOrderStatus
+  note            String?
+  changedByUserId BigInt?
+  createdAt       DateTime         @default(now())
+
+  workOrder MaintenanceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  changedBy User?                @relation("StatusLogChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([workOrderId])
+  @@map("work_order_status_logs")
+}
+
+model BreakdownReport {
+  id                     String            @id @default(cuid())
+  firmId                 BigInt?
+  breakdownNumber        String?           @unique
+  machineId              String
+  failureType            String?
+  description            String
+  severity               BreakdownSeverity
+  status                 BreakdownStatus   @default(OPEN)
+  reportedByUserId       BigInt?
+  assignedToUserId       BigInt?
+  reportedAt             DateTime          @default(now())
+  resolvedAt             DateTime?
+  rootCause              String?
+  correctiveAction       String?
+  preventiveAction       String?
+  estimatedDowntimeHours Decimal?          @db.Decimal(8, 2)
+  actualDowntimeMinutes  Int?
+  remarks                String?
+
+  firm       Firm?                 @relation(fields: [firmId], references: [id])
+  machine    Machine               @relation(fields: [machineId], references: [id])
+  reportedBy User?                 @relation("BreakdownReportedBy", fields: [reportedByUserId], references: [id])
+  assignedTo User?                 @relation("BreakdownAssignedTo", fields: [assignedToUserId], references: [id])
+  workOrder  MaintenanceWorkOrder?
+
+  @@index([machineId])
+  @@index([firmId])
+  @@map("breakdown_reports")
+}
+
+model DailyMachineLog {
+  id               String   @id @default(cuid())
+  firmId           BigInt?
+  machineId        String
+  date             DateTime
+  shift            String?
+  startTimeReading String?
+  endTimeReading   String?
+  runtimeHours     Decimal  @default(0) @db.Decimal(8, 2)
+  temperature      Decimal? @db.Decimal(6, 2)
+  load             Decimal? @db.Decimal(6, 2)
+  oilLevel         String?
+  vibration        String?
+  operatorName     String? // free text — CreateDailyMachineLogDto sends a name, not a user id; no operator picker in this form
+  remarks          String?
+  createdAt        DateTime @default(now())
+
+  firm    Firm?   @relation(fields: [firmId], references: [id])
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  @@index([machineId])
+  @@map("daily_machine_logs")
+}
+
+// ----- Repair -----
+
+// Deliberately separate from Store's `Vendors` model — repair/AMC vendors (outhouse
+// repair shops, spares suppliers, authorized OEMs) are a different pool with
+// different fields than procurement/raw-material vendors; see decision #2 in the
+// architecture doc.
+model RepairVendor {
+  id           String   @id @default(cuid())
+  firmId       BigInt?
+  name         String
+  type         String? // e.g. "Outhouse Repair" | "Spares Supplier" | "Authorized OEM" — free text, not enforced as an enum since new vendor types are common
+  gstNumber    String?
+  email        String?
+  address      String?
+  mobileNumber String?
+  contactName  String?
+  createdAt    DateTime @default(now())
+
+  firm          Firm?               @relation(fields: [firmId], references: [id])
+  spareParts    SparePart[]
+  repairIndents RepairIndent[]
+  offers        RepairVendorOffer[]
+  amcContracts  AMCContract[]
+
+  rentedMachines       Machine[]              @relation("MachineRentalVendor")
+  outsourcedWorkOrders MaintenanceWorkOrder[] @relation("WorkOrderVendor")
+
+  @@index([firmId])
+  @@map("repair_vendors")
+}
+
+model SparePart {
+  id          String   @id @default(cuid())
+  firmId      BigInt?
+  partName    String
+  partCode    String?  @unique
+  machineType String?
+  vendorId    String?
+  unitPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  stockQty    Int      @default(0)
+  minStockQty Int      @default(0)
+  unit        String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  firm         Firm?              @relation(fields: [firmId], references: [id])
+  vendor       RepairVendor?      @relation(fields: [vendorId], references: [id])
+  indentUsages RepairIndentPart[]
+
+  @@index([firmId])
+  @@map("spare_parts")
+}
+
+model RepairIndent {
+  id                   String                 @id @default(cuid())
+  firmId               BigInt?
+  indentNumber         String?                @unique
+  machineId            String?
+  assetId              String?
+  machinePartId        String? // which part of the machine is broken — real picker (MachinePart), selected at indent creation
+  doerUserId           BigInt? // logged-by user — real `/user/list` picker, same convention as Maintenance's assignee fields
+  departmentId         BigInt? // usually auto-filled from machine.departmentId server-side; no department picker in this form
+  problem              String
+  priority             Priority               @default(MEDIUM)
+  status               RepairIndentStatus     @default(PENDING)
+  approvalStatus       ApprovalDecisionStatus @default(PENDING)
+  routingType          RepairRoutingType?
+  expectedDeliveryDays Int?
+  location             String?
+  image                String?
+  remarks              String?
+  soundOfMachine       String?
+  temperature          String?
+  maintenanceCost      Decimal?               @db.Decimal(12, 2)
+  approvedAt           DateTime?
+  vendorId             String?
+  technicianId         String?
+  technicianAssignedAt DateTime?
+  technicianWorkNotes  String?
+  workOrderId          String?                @map("work_order_id")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  firm           Firm?              @relation(fields: [firmId], references: [id])
+  machine        Machine?           @relation(fields: [machineId], references: [id])
+  asset          Asset?             @relation(fields: [assetId], references: [id])
+  machinePart    MachinePart?       @relation(fields: [machinePartId], references: [id])
+  department     Department?        @relation(fields: [departmentId], references: [id])
+  doer           User?              @relation("IndentDoer", fields: [doerUserId], references: [id])
+  vendor         RepairVendor?      @relation(fields: [vendorId], references: [id])
+  technician     Technician?        @relation(fields: [technicianId], references: [id])
+  parts          RepairIndentPart[]
+  outhouseRepair OuthouseRepair?
+  workOrder      MaintenanceWorkOrder? @relation(fields: [workOrderId], references: [id])
+
+  @@index([machineId])
+  @@index([workOrderId])
+  @@index([assetId])
+  @@index([firmId])
+  @@index([status])
+  @@map("repair_indents")
+}
+
+// Parts-used line items — fills the gap where the frontend only had a single
+// `machinePartName` string per indent plus an aggregated `Asset.partNames[]` array.
+model RepairIndentPart {
+  id       String   @id @default(cuid())
+  indentId String
+  partId   String?
+  partName String
+  quantity Int      @default(1)
+  cost     Decimal? @db.Decimal(12, 2)
+
+  indent RepairIndent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  part   SparePart?   @relation(fields: [partId], references: [id])
+
+  @@index([indentId])
+  @@map("repair_indent_parts")
+}
+
+// 1:1 with RepairIndent when routingType = OUTHOUSE. The frontend flattened dispatch
+// -> receiving/inspection -> billing -> payment into one `RBOuthouseRepair` record;
+// split here into per-stage child tables (RepairDispatch/RepairReceiving/RepairPayment)
+// since each stage is filled in by a different screen at a different point in time.
+model OuthouseRepair {
+  id               String    @id @default(cuid())
+  indentId         String    @unique
+  vendorRemarks    String?
+  vendorAssignedAt DateTime?
+  rateApprovedAt   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  indent    RepairIndent        @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  offers    RepairVendorOffer[]
+  dispatch  RepairDispatch?
+  receiving RepairReceiving?
+  payment   RepairPayment?
+
+  @@map("outhouse_repairs")
+}
+
+// Competing vendor rate quotes for an outhouse repair — one gets isApproved = true.
+model RepairVendorOffer {
+  id               String   @id @default(cuid())
+  outhouseRepairId String
+  vendorId         String
+  rate             Decimal  @db.Decimal(12, 2)
+  paymentTerm      String?
+  isApproved       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  outhouseRepair OuthouseRepair @relation(fields: [outhouseRepairId], references: [id], onDelete: Cascade)
+  vendor         RepairVendor   @relation(fields: [vendorId], references: [id])
+
+  @@index([outhouseRepairId])
+  @@map("repair_vendor_offers")
+}
+
+// Sent-machine stage: machine dispatched to the outhouse vendor.
+model RepairDispatch {
+  id                    String    @id @default(cuid())
+  outhouseRepairId      String    @unique
+  transporterName       String?
+  vehicleNo             String?
+  driverName            String?
+  driverContact         String?
+  transportationCharges Decimal?  @db.Decimal(12, 2)
+  weighmentSlipNo       String?
+  transportImage        String?
+  sentPaymentType       String?
+  sentPaymentAmount     Decimal?  @db.Decimal(12, 2)
+  sentAt                DateTime?
+  expectedReturnDate    DateTime?
+
+  outhouseRepair OuthouseRepair @relation(fields: [outhouseRepairId], references: [id], onDelete: Cascade)
+
+  @@map("repair_dispatches")
+}
+
+// Store-in stage: machine received back, inspected, bill logged.
+model RepairReceiving {
+  id                    String            @id @default(cuid())
+  outhouseRepairId      String            @unique
+  inspectedByUserId     BigInt?
+  inspectedByName       String?
+  inspectionResult      InspectionResult?
+  inspectionRemarks     String?
+  returnTransporterName String?
+  returnTransportAmount Decimal?          @db.Decimal(12, 2)
+  billImage             String?
+  billNo                String?
+  typeOfBill            String?
+  totalBillAmount       Decimal?          @db.Decimal(12, 2)
+  toBePaidAmount        Decimal?          @db.Decimal(12, 2)
+  receivedAt            DateTime?
+  status                StoreInStatus     @default(PENDING_VERIFICATION)
+
+  outhouseRepair OuthouseRepair @relation(fields: [outhouseRepairId], references: [id], onDelete: Cascade)
+  inspectedBy    User?          @relation("ReceivingInspectedBy", fields: [inspectedByUserId], references: [id])
+
+  @@map("repair_receivings")
+}
+
+// Payment stage: final billing/payment reconciliation.
+model RepairPayment {
+  id                 String              @id @default(cuid())
+  outhouseRepairId   String              @unique
+  billMatch          Boolean?
+  billStatus         String?
+  finalPaymentAmount Decimal?            @db.Decimal(12, 2)
+  paymentMode        RepairPaymentMode?
+  status             RepairPaymentStatus @default(PENDING_APPROVAL)
+  paidAt             DateTime?
+
+  outhouseRepair OuthouseRepair @relation(fields: [outhouseRepairId], references: [id], onDelete: Cascade)
+
+  @@map("repair_payments")
+}
+
+model Technician {
+  id           String   @id @default(cuid())
+  firmId       BigInt?
+  name         String
+  contact      String?
+  whatsapp     String?
+  departmentId BigInt?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  firm       Firm?          @relation(fields: [firmId], references: [id])
+  department Department?    @relation(fields: [departmentId], references: [id])
+  indents    RepairIndent[]
+
+  @@index([firmId])
+  @@map("technicians")
+}
+
+model AMCContract {
+  id              String    @id @default(cuid())
+  firmId          BigInt?
+  contractNumber  String?   @unique
+  machineId       String?
+  assetId         String?
+  vendorId        String?
+  startDate       DateTime
+  endDate         DateTime
+  annualCost      Decimal   @db.Decimal(12, 2)
+  visitsPerYear   Int       @default(0)
+  completedVisits Int       @default(0)
+  status          AMCStatus @default(ACTIVE)
+  scope           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  firm    Firm?         @relation(fields: [firmId], references: [id])
+  machine Machine?      @relation(fields: [machineId], references: [id])
+  asset   Asset?        @relation(fields: [assetId], references: [id])
+  vendor  RepairVendor? @relation(fields: [vendorId], references: [id])
+
+  @@index([firmId])
+  @@map("amc_contracts")
+}
+
+// Atomic counter backing every "{PREFIX}-{YEAR}-{seq}" business code (REP-2026-001,
+// WO-2026-001, BD-2026-001, AMC-2026-001, ...). Replaces the frontend mocks'
+// collision-prone `array.length + 1` numbering (breaks after any delete) — increment
+// lastValue inside a transaction per code generation.
+model DocumentSequence {
+  id        String  @id @default(cuid())
+  firmId    BigInt?
+  prefix    String
+  year      Int
+  lastValue Int     @default(0)
+
+  firm Firm? @relation(fields: [firmId], references: [id])
+
+  @@unique([firmId, prefix, year])
+  @@map("document_sequences")
+}
+
+// ===================== FLEET: OWNERSHIP, DIESEL LEDGER, USAGE LOGBOOK (fleet_v1) =====================
+// Design: md/FLEET_DIESEL_AND_MAINTENANCE_MERGE_PLAN.md. Partial unique indexes and CHECK constraints
+// live only in the SQL migration (Prisma cannot express them): one OPENING receipt per firm,
+// one OPEN usage entry per machine, litres > 0, stop >= start, usage null <=> stop null.
+
+enum OwnershipType {
+  OWNED
+  RENTED
+}
+
+enum ReadingUnit {
+  KM
+  HOURS
+  NONE
+}
+
+enum HireType {
+  DRY
+  WET
+}
+
+enum EquipmentType {
+  EXCAVATOR
+  BACKHOE_LOADER
+  TIPPER
+  TRUCK
+  TRANSIT_MIXER
+  ROLLER
+  TRACTOR
+  WATER_PUMP
+  DG_SET
+  CAR
+  OTHER
+}
+
+enum DieselReceiptKind {
+  RECEIPT
+  OPENING
+  ADJUSTMENT
+}
+
+enum DieselLogSource {
+  MANUAL
+  STORE_ISSUE
+}
+
+enum OutsourceStatus {
+  TO_SEND
+  SENT
+  RECEIVED
+  PAID
+}
+
+// Diesel coming INTO a firm's site stock ("QTY RECEIVED", opening balance, corrections).
+model DieselReceipt {
+  id             String            @id @default(cuid())
+  firmId         BigInt
+  siteLocationId BigInt?
+  kind           DieselReceiptKind @default(RECEIPT)
+  receivedAt     DateTime          @db.Timestamptz(3)
+  receiptDate    DateTime          @db.Date // IST calendar day, for grouping
+  litres         Decimal           @db.Decimal(10, 2) // > 0, except ADJUSTMENT
+  supplierName   String?
+  reference      String?
+  note           String?
+  createdById    BigInt
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
+  voidedAt       DateTime?         @db.Timestamptz(3)
+  voidedById     BigInt?
+  voidReason     String?
+
+  firm         Firm                 @relation(fields: [firmId], references: [id])
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  createdBy    User                 @relation("DieselReceiptCreatedBy", fields: [createdById], references: [id])
+  voidedBy     User?                @relation("DieselReceiptVoidedBy", fields: [voidedById], references: [id])
+
+  @@index([firmId, receiptDate])
+  @@map("diesel_receipts")
+}
+
+// Diesel issued OUT to a machine, or to a free-text consumer ("other diesel").
+model DieselLog {
+  id             String          @id @default(cuid())
+  firmId         BigInt
+  siteLocationId BigInt?
+  machineId      String?
+  consumerLabel  String?
+  usageLogId     String?
+  issuedAt       DateTime        @db.Timestamptz(3)
+  issueDate      DateTime        @db.Date
+  litres         Decimal         @db.Decimal(10, 2)
+  source         DieselLogSource @default(MANUAL)
+  externalRef    String?         @unique // Store issue id later; idempotency key for recordIssue()
+  note           String?
+  createdById    BigInt
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  voidedAt       DateTime?       @db.Timestamptz(3)
+  voidedById     BigInt?
+  voidReason     String?
+
+  firm         Firm                 @relation(fields: [firmId], references: [id])
+  siteLocation SiteLocationDetails? @relation(fields: [siteLocationId], references: [id])
+  machine      Machine?             @relation(fields: [machineId], references: [id], onDelete: Restrict) // a machine with diesel history cannot be deleted
+  usageLog     MachineUsageLog?     @relation(fields: [usageLogId], references: [id])
+  createdBy    User                 @relation("DieselLogCreatedBy", fields: [createdById], references: [id])
+  voidedBy     User?                @relation("DieselLogVoidedBy", fields: [voidedById], references: [id])
+
+  @@index([firmId, issueDate])
+  @@index([machineId, issueDate])
+  @@map("diesel_logs")
+}
+
+// Meter-based usage: start/stop readings per entry. Replaces DailyMachineLog.
+model MachineUsageLog {
+  id               String    @id @default(cuid())
+  firmId           BigInt
+  machineId        String
+  logDate          DateTime  @db.Date
+  startedAt        DateTime  @db.Timestamptz(3)
+  stoppedAt        DateTime? @db.Timestamptz(3)
+  startReading     Decimal   @db.Decimal(12, 2)
+  stopReading      Decimal?  @db.Decimal(12, 2) // null = OPEN entry
+  usage            Decimal?  @db.Decimal(12, 2) // written by the service only; null while open
+  meterReset       Boolean   @default(false)
+  meterResetReason String?
+  continuityGap    Decimal?  @db.Decimal(12, 2)
+  continuityReason String?
+  isFlagged        Boolean   @default(false)
+  flagReasons      String[]  @default([])
+  operatorId       BigInt?
+  remarks          String?
+  createdById      BigInt
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  voidedAt         DateTime? @db.Timestamptz(3)
+  voidedById       BigInt?
+  voidReason       String?
+
+  firm       Firm        @relation(fields: [firmId], references: [id])
+  machine    Machine     @relation(fields: [machineId], references: [id])
+  operator   User?       @relation("UsageLogOperator", fields: [operatorId], references: [id])
+  createdBy  User        @relation("UsageLogCreatedBy", fields: [createdById], references: [id])
+  voidedBy   User?       @relation("UsageLogVoidedBy", fields: [voidedById], references: [id])
+  dieselLogs DieselLog[]
+
+  @@index([machineId, startedAt])
+  @@index([firmId, logDate])
+  @@map("machine_usage_logs")
+}

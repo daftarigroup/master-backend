@@ -1,16 +1,38 @@
+import { parseFirmId } from '../../../utils/firmScope';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../database/prisma';
 
 const ASSET_INCLUDE = {
   createdBy: { select: { id: true, name: true, user_name: true } },
   firm: { select: { id: true, firm_name: true } },
+  machine: {
+    select: {
+      id: true,
+      firmId: true,
+      firm: { select: { id: true, firm_name: true } },
+      assignments: {
+        where: { endedAt: null },
+        take: 1,
+        select: { id: true, firmId: true, firm: { select: { id: true, firm_name: true } } },
+      },
+    },
+  },
 };
 
 export const assetRepository = {
-  findMany(filters: { status?: string; category?: string; search?: string; firmId?: string } = {}) {
+  findMany(filters: { status?: string; category?: string; search?: string; firmId?: string; ownership?: string } = {}) {
+    const fid = parseFirmId(filters.firmId);
     const where: Prisma.AssetWhereInput = {
-      ...(filters.firmId ? { firmId: BigInt(filters.firmId) } : {}),
+      ...(fid !== null
+        ? {
+            OR: [
+              { firmId: fid },
+              { machine: { assignments: { some: { endedAt: null, firmId: fid } } } },
+            ],
+          }
+        : {}), // 'all' = no filter
       ...(filters.status ? { status: filters.status as any } : {}),
+      ...(filters.ownership === 'OWNED' || filters.ownership === 'RENTED' ? { ownershipType: filters.ownership } : {}),
       ...(filters.category ? { category: filters.category as any } : {}),
       ...(filters.search
         ? {

@@ -1,3 +1,4 @@
+import { parseBigIntId } from '../../../utils/firmScope';
 import { AssetCategory, AssetStatus, AssetType, DepreciationMethod, PlanFrequency, Priority } from '@prisma/client';
 
 // Bidirectional maps between the frontend's display-friendly literal strings
@@ -134,13 +135,36 @@ function decimalToNumber(value: unknown): number {
   return Number(value);
 }
 
+/**
+ * Fields that carry purchase cost, supplier or repair spend. Users without cost access (see requireCostAccess) never receive them
+ * (they are omitted, not zeroed) and cannot write them, so a save from a form that never saw them cannot blank them.
+ */
+export const ASSET_COST_FIELDS = ['cost', 'assetValue', 'depMethod', 'supplierName', 'supplierPhone', 'paymentMode', 'repairCost', 'totalRepairCost'] as const;
+
+export function withoutAssetCost<T extends Record<string, any>>(dto: T): Omit<T, (typeof ASSET_COST_FIELDS)[number]> {
+  const copy: Record<string, any> = { ...dto };
+  for (const k of ASSET_COST_FIELDS) delete copy[k];
+  return copy as never;
+}
+
+export function stripAssetCostInput(body: Record<string, any>): Record<string, any> {
+  const copy = { ...body };
+  for (const k of ASSET_COST_FIELDS) delete copy[k];
+  return copy;
+}
+
 export const assetMapper = {
   toPrismaCreate(body: Record<string, any>) {
     const rawFirm = body.firmId ?? body.projectId;
-    const firmId = rawFirm && rawFirm !== 'none' ? BigInt(rawFirm) : null;
+    const firmId = rawFirm && rawFirm !== 'none' ? parseBigIntId(rawFirm, 'firmId') : null;
+
+    // A RENTED asset carries no purchase, warranty, AMC or maintenance data
+    const rented = body.ownershipType === 'RENTED';
+    const keep = <T>(v: T, whenRented: T) => (rented ? whenRented : v);
 
     return {
       productName: body.productName,
+      ownershipType: rented ? ('RENTED' as const) : ('OWNED' as const),
       ...(firmId ? { firm: { connect: { id: firmId } } } : {}),
       category: CATEGORY_TO_DB[body.category] ?? 'IT',
       type: TYPE_TO_DB[body.type] ?? 'ASSET',
@@ -153,7 +177,7 @@ export const assetMapper = {
       status: body.status ? (STATUS_TO_DB[body.status] ?? 'ACTIVE') : 'ACTIVE',
       assetDate: toDate(body.assetDate) ?? new Date(),
       invoiceNo: body.invoiceNo ?? null,
-      cost: body.cost !== undefined && body.cost !== null && body.cost !== '' ? Number(body.cost) : null,
+      cost: keep(body.cost !== undefined && body.cost !== null && body.cost !== '' ? Number(body.cost) : null, null),
       quantity: body.quantity !== undefined && body.quantity !== null && body.quantity !== '' ? Number(body.quantity) : 1,
       supplierName: body.supplierName ?? null,
       supplierPhone: body.supplierPhone ?? null,
@@ -162,11 +186,11 @@ export const assetMapper = {
       department: body.department ?? null,
       assignedTo: body.assignedTo ?? null,
       responsiblePerson: body.responsiblePerson ?? null,
-      warrantyAvailable: body.warrantyAvailable === 'Yes',
-      warrantyEnd: toDate(body.warrantyEnd) ?? null,
-      amcActive: body.amc === 'Yes',
-      amcEnd: toDate(body.amcEnd) ?? null,
-      maintenanceRequired: body.maintenanceRequired === 'Yes',
+      warrantyAvailable: keep(body.warrantyAvailable === 'Yes', false),
+      warrantyEnd: keep(toDate(body.warrantyEnd) ?? null, null),
+      amcActive: keep(body.amc === 'Yes', false),
+      amcEnd: keep(toDate(body.amcEnd) ?? null, null),
+      maintenanceRequired: keep(body.maintenanceRequired === 'Yes', false),
       maintenanceType: body.maintenanceType ?? null,
       frequency: body.frequency ? (FREQUENCY_TO_DB[body.frequency] ?? null) : null,
       nextService: toDate(body.nextService) ?? null,
@@ -187,10 +211,11 @@ export const assetMapper = {
     };
 
     set('productName', body.productName);
+    if (body.ownershipType !== undefined) set('ownershipType', body.ownershipType === 'RENTED' ? 'RENTED' : 'OWNED');
     if (body.firmId !== undefined || body.projectId !== undefined) {
       const f = body.firmId ?? body.projectId;
       if (f && f !== 'none') {
-        data.firm = { connect: { id: BigInt(f) } };
+        data.firm = { connect: { id: parseBigIntId(f, 'firmId') } };
       } else {
         data.firm = { disconnect: true };
       }
@@ -236,8 +261,16 @@ export const assetMapper = {
     return {
       id: row.id,
       sn: row.assetCode,
+      ownershipType: row.ownershipType ?? 'OWNED',
       firmId: row.firmId ? String(row.firmId) : null,
       firmName: row.firm?.firm_name ?? '',
+      assignment: row.machine?.assignments?.[0]
+        ? {
+            id: String(row.machine.assignments[0].id),
+            firmId: String(row.machine.assignments[0].firmId),
+            firmName: row.machine.assignments[0].firm?.firm_name ?? null,
+          }
+        : null,
       productName: row.productName,
       category: CATEGORY_FROM_DB[row.category as AssetCategory] ?? row.category,
       type: TYPE_FROM_DB[row.type as AssetType] ?? row.type,

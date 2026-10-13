@@ -1,3 +1,4 @@
+import { parseBigIntId } from '../../../utils/firmScope';
 import { prisma } from '../../../database/prisma';
 import { ApiError } from '../../../utils/ApiError';
 import { paginationMeta, parsePagination } from './mapUtils';
@@ -40,7 +41,7 @@ export const technicianService = {
         name: data.name.trim(),
         contact: data.contact ?? null,
         whatsapp: data.whatsapp ?? null,
-        departmentId: data.departmentId ? BigInt(data.departmentId) : null,
+        departmentId: data.departmentId ? parseBigIntId(data.departmentId, 'departmentId') : null,
       },
       include: { department: true },
     });

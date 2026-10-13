@@ -1,8 +1,13 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
+import { requireLogin } from '../../../middleware/auth.middleware';
 import { IndentController } from '../controllers/indent.controller';
 import { UserController } from '../controllers/user.controller';
 import { GenericController } from '../controllers/generic.controller';
 import { UploadController } from '../controllers/upload.controller';
+import { VendorBidController } from '../controllers/vendorBid.controller';
+import { StockController } from '../controllers/stock.controller';
+import { ApiError } from '../../../utils/ApiError';
+import { STORE_ENTITY_TABLES } from '../lib/entityTables';
 import { validate } from '../../../middleware/validate.middleware';
 import {
   updateIndentApprovalSchema,
@@ -25,6 +30,34 @@ const genericController = new GenericController();
 const uploadController = new UploadController();
 const stageResetController = new StageResetController();
 const poController = new POController();
+const vendorBidController = new VendorBidController();
+const stockController = new StockController();
+
+// ==================== LOGIN GATE ====================
+// Every Store route needs a logged-in user except the few that a browser calls with no login. This list is the ONLY way in
+// without a token; each entry is temporary or deliberate (see md/integration_summaries/P0.2_*):
+//  - login itself;
+//  - file-proxy / files: used in <img>, <a> and window.open, which cannot send an Authorization header;
+//  - POST /upload/presign only for the public job-application page (bucket hr, path candidates/photos|resumes/...);
+//  - public Create Account (POST /users): allowed, but the controller turns an anonymous call into a no-access USER;
+//  - the vendor bid page (/bid/:token) has no login: GET / PATCH /vendor-bid/:token see only that token's quotation rows.
+const isPublicStoreRequest = (req: Request): boolean => {
+  const { method, path } = req;
+  if (method === 'POST' && path === '/users/authenticate') return true;
+  if (method === 'GET' && (path === '/file-proxy' || path.startsWith('/files/'))) return true;
+  if (method === 'POST' && path === '/users') return true; // public Create Account: the controller makes it a no-access account
+  // The public job-application page uploads a photo and resume here; nothing else may presign without a login.
+  if (method === 'POST' && path === '/upload/presign') {
+    const body = (req.body ?? {}) as { bucket?: unknown; path?: unknown };
+    return body.bucket === 'hr' && typeof body.path === 'string' && /^candidates\/(photos|resumes)\//.test(body.path) && !body.path.includes('..');
+  }
+  if (path.startsWith('/vendor-bid/') && (method === 'GET' || method === 'PATCH')) return true;
+  return false;
+};
+router.use((req, res, next) => (isPublicStoreRequest(req) ? next() : requireLogin(req, res, next)));
+
+// ==================== STOCK ====================
+router.get('/inventory/stock', stockController.getStock);
 
 // ==================== PURCHASE ORDER QUEUED ROUTES ====================
 router.get('/po/next-number', poController.getNextPoNumber);
@@ -78,7 +111,15 @@ router.delete('/upload', uploadController.deleteUpload);
 router.get('/file-proxy', uploadController.getFile);
 router.get('/files/*filePath', uploadController.getFile);
 
+// ==================== VENDOR BID PAGE (public, token only) ====================
+router.get('/vendor-bid/:token', vendorBidController.getByToken);
+router.patch('/vendor-bid/:token', vendorBidController.submitRate);
+
 // ==================== GENERIC ENTITY ROUTES ====================
+router.param('table', (_req, _res, next, table: string) => {
+  if (!STORE_ENTITY_TABLES.has(table)) return next(new ApiError(403, `Table '${table}' is not available through the store API`));
+  next();
+});
 router.get('/entity/:table', genericController.getEntities);
 router.get('/entity/:table/:id', genericController.getEntityById);
 router.post('/entity/:table', genericController.createEntity);

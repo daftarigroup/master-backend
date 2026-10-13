@@ -1,24 +1,45 @@
+import { parseFirmId, resolveFirmScope, firmWhere } from '../../../utils/firmScope';
+import type { UserAuthContext } from '../../../utils/currentUser';
+import { istMonthOf } from '../../fleet/lib/istDate';
 import { prisma } from '../../../database/prisma';
 import { decimalToNumber } from './mapUtils';
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+// Start of an IST calendar month as an instant (the sites run on IST, so a month starts at 00:00 IST).
+function istMonthStart(year: number, monthIndex: number): Date {
+  return new Date(Date.UTC(year, monthIndex, 1) - IST_OFFSET_MS);
+}
+
 function timeframeStart(timeframe: string): Date {
-  const now = new Date();
-  if (timeframe === 'lastQuarter') return new Date(now.getFullYear(), now.getMonth() - 3, 1);
-  if (timeframe === 'thisYear') return new Date(now.getFullYear(), 0, 1);
-  return new Date(now.getFullYear(), now.getMonth(), 1); // thisMonth (default)
+  const [y, m] = istMonthOf(new Date()).split('-').map(Number);
+  if (timeframe === 'lastQuarter') return istMonthStart(y, m - 1 - 3);
+  if (timeframe === 'thisYear') return istMonthStart(y, 0);
+  return istMonthStart(y, m - 1); // thisMonth (default)
 }
 
 export const reportsService = {
-  async costAnalysis(query: { timeframe?: string; departmentId?: string; firmId?: string }) {
+  async costAnalysis(ctx: UserAuthContext | null, query: { timeframe?: string; departmentId?: string; firmId?: string }) {
     const from = timeframeStart(query.timeframe ?? 'thisMonth');
+    const scope = resolveFirmScope(ctx, query.firmId);
+    const departmentId = parseFirmId(query.departmentId);
+    // Only finished work with a bill counts, and an out-sourced job only once it is back from the vendor (RECEIVED/PAID):
+    // before that its cost is an estimate and it would be counted again when the final bill lands.
+    const finished: Array<Record<string, unknown>> = [
+      { outsourceStatus: null, completedAt: { gte: from } },
+      { outsourceStatus: { in: ['RECEIVED', 'PAID'] }, receivedAt: { gte: from } },
+    ];
     const workOrders = await prisma.maintenanceWorkOrder.findMany({
       where: {
         cost: { not: null },
-        completedAt: { gte: from },
-        ...(query.departmentId ? { machine: { departmentId: BigInt(query.departmentId) } } : {}),
-        ...(query.firmId ? { OR: [{ firmId: BigInt(query.firmId) }, { machine: { firmId: BigInt(query.firmId) } }] } : {}),
-      },
-      select: { cost: true, completedAt: true, machine: { select: { department: { select: { name: true } } } } },
+        status: { in: ['COMPLETED', 'COMPLETED_LATE'] },
+        AND: [
+          { OR: finished },
+          ...(departmentId !== null ? [{ machine: { departmentId } }] : []),
+          ...(scope.all ? [] : [{ OR: [firmWhere(scope), firmWhere(scope, 'machine.firmId')] }]),
+        ],
+      } as any,
+      select: { cost: true, completedAt: true, receivedAt: true, outsourceStatus: true, machine: { select: { department: { select: { name: true } } } } },
     });
 
     const monthlyMap = new Map<string, number>();
@@ -28,7 +49,8 @@ export const reportsService = {
     for (const wo of workOrders) {
       const cost = decimalToNumber(wo.cost);
       totalCost += cost;
-      const monthKey = wo.completedAt ? wo.completedAt.toISOString().slice(0, 7) : 'unknown';
+      const when = wo.outsourceStatus ? wo.receivedAt : wo.completedAt;
+      const monthKey = when ? istMonthOf(when) : 'unknown';
       monthlyMap.set(monthKey, (monthlyMap.get(monthKey) ?? 0) + cost);
       const deptName = wo.machine?.department?.name ?? 'Unassigned';
       deptMap.set(deptName, (deptMap.get(deptName) ?? 0) + cost);
@@ -41,12 +63,12 @@ export const reportsService = {
     };
   },
 
-  async machineReliability(query: { timeframe?: string; departmentId?: string; firmId?: string }) {
+  async machineReliability(ctx: UserAuthContext | null, query: { timeframe?: string; departmentId?: string; firmId?: string }) {
     const from = timeframeStart(query.timeframe ?? 'thisMonth');
     const machines = await prisma.machine.findMany({
       where: {
-        ...(query.departmentId ? { departmentId: BigInt(query.departmentId) } : {}),
-        ...(query.firmId ? { firmId: BigInt(query.firmId) } : {}),
+        ...(parseFirmId(query.departmentId) !== null ? { departmentId: parseFirmId(query.departmentId)! } : {}),
+        ...firmWhere(resolveFirmScope(ctx, query.firmId)),
       },
       select: {
         id: true,

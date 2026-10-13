@@ -8,6 +8,7 @@ import { parsePagination, paginationMeta } from './mapUtils';
 import { priorityFromNumber } from './priority';
 import { workOrderService } from './workOrder.service';
 import { UserAuthContext } from '../../../utils/currentUser';
+import { machineRowFirmFilter, parseBigIntId } from '../../../utils/firmScope';
 
 export const planService = {
   async list(query: Record<string, any>, auth?: UserAuthContext | null) {
@@ -20,35 +21,8 @@ export const planService = {
     if (query.search) andConditions.push({ title: { contains: query.search, mode: 'insensitive' } });
 
     if (auth) {
-      if (auth.role === 'SUPER_ADMIN') {
-        if (query.firmId || query.projectId) {
-          const fId = BigInt(query.firmId || query.projectId);
-          andConditions.push({
-            OR: [{ firmId: fId }, { machine: { firmId: fId } }],
-          });
-        }
-      } else if (auth.role === 'ADMIN') {
-        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
-        let allowedFirms = auth.permittedFirms;
-        if (requestedFirm !== null) {
-          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
-        }
-        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
-        andConditions.push({
-          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
-        });
-      } else {
-        // USER role: project/firm-based — same as ADMIN but scoped to their own permittedFirms.
-        const requestedFirm = query.firmId || query.projectId ? BigInt(query.firmId || query.projectId) : null;
-        let allowedFirms = auth.permittedFirms;
-        if (requestedFirm !== null) {
-          allowedFirms = auth.permittedFirms.includes(requestedFirm) ? [requestedFirm] : [-1n];
-        }
-        const ids = allowedFirms.length > 0 ? allowedFirms : [-1n];
-        andConditions.push({
-          OR: [{ firmId: { in: ids } }, { machine: { firmId: { in: ids } } }],
-        });
-      }
+      const firmFilter = machineRowFirmFilter(auth, query.firmId ?? query.projectId);
+      if (firmFilter) andConditions.push(firmFilter);
     }
 
     const where: Prisma.MaintenancePlanWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
@@ -78,7 +52,7 @@ export const planService = {
           machine: { connect: { id: body.machineId } },
           ...(body.activityTypeId ? { activityType: { connect: { id: body.activityTypeId } } } : {}),
           ...(body.machinePartId ? { machinePart: { connect: { id: body.machinePartId } } } : {}),
-          ...(body.assignedToId ? { assignedTo: { connect: { id: BigInt(body.assignedToId) } } } : {}),
+          ...(body.assignedToId ? { assignedTo: { connect: { id: parseBigIntId(body.assignedToId, 'assignedToId') } } } : {}),
           ...(createdById ? { createdBy: { connect: { id: createdById } } } : {}),
         },
         include: {
@@ -114,13 +88,20 @@ export const planService = {
 
       await workOrderService.createInternal(tx, {
         machineId: plan.machineId,
-        firmId: plan.firmId,
+        // plans never carry a firm, so the work order takes its machine's (it used to be left empty)
+        firmId: plan.firmId ?? machine.firmId,
         planId: plan.id,
         machinePartId: plan.machinePartId,
         currentAssigneeUserId: plan.assignedToUserId,
         type: workOrderType,
         priority: plan.priority,
         actualDueDate: plan.startDate,
+        // the work order carries its own content from now on
+        title: plan.title,
+        description: plan.description,
+        activityTypeId: plan.activityTypeId,
+        documentUrl: plan.documentUrl,
+        requestedById: createdById,
       });
 
       return planMapper.toDTO(plan);
@@ -134,8 +115,31 @@ export const planService = {
     if (body.activityTypeId !== undefined) (data as any).activityType = { connect: { id: body.activityTypeId } };
     if (body.machinePartId !== undefined) (data as any).machinePart = body.machinePartId ? { connect: { id: body.machinePartId } } : { disconnect: true };
     if (body.machineId !== undefined) (data as any).machine = { connect: { id: body.machineId } };
-    if (body.assignedToId !== undefined) (data as any).assignedTo = { connect: { id: BigInt(body.assignedToId) } };
+    if (body.assignedToId !== undefined) (data as any).assignedTo = { connect: { id: parseBigIntId(body.assignedToId, 'assignedToId') } };
     const row = await planRepository.update(id, data);
+
+    // Work orders own their content now (and always carried their own assignee, machine and due date), so a plan
+    // edit has to reach the ones that are still open. Before, the Edit modals changed the plan only and the
+    // work order kept its old machine, assignee and due date.
+    const open: Prisma.MaintenanceWorkOrderUpdateManyMutationInput & Record<string, unknown> = {};
+    if (body.title !== undefined) open.title = body.title;
+    if (body.description !== undefined) open.description = body.description;
+    if (body.documentUrl !== undefined) open.documentUrl = body.documentUrl;
+    if (body.priority !== undefined) open.priority = priorityFromNumber(body.priority);
+    if (body.activityTypeId !== undefined) open.activityTypeId = body.activityTypeId;
+    if (body.machineId !== undefined) open.machineId = body.machineId;
+    if (body.machinePartId !== undefined) open.machinePartId = body.machinePartId || null;
+    if (body.assignedToId !== undefined) open.currentAssigneeUserId = parseBigIntId(body.assignedToId, 'assignedToId');
+    if (body.startDate !== undefined && row.frequency === 'ONE_TIME') {
+      open.actualDueDate = new Date(body.startDate);
+      open.scheduledDate = new Date(body.startDate);
+    }
+    if (Object.keys(open).length > 0) {
+      await prisma.maintenanceWorkOrder.updateMany({
+        where: { planId: id, status: { in: ['PENDING', 'IN_PROGRESS'] } },
+        data: open as Prisma.MaintenanceWorkOrderUncheckedUpdateManyInput,
+      });
+    }
     return planMapper.toDTO(row);
   },
 

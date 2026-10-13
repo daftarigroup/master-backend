@@ -9,6 +9,7 @@ export const assetService = {
     const rows = await assetRepository.findMany({
       status: query.status,
       category: query.category,
+      ownership: query.ownership,
       search: query.search,
       firmId: query.firmId || query.projectId,
     });

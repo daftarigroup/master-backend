@@ -4,10 +4,27 @@ import { prisma } from '../../../database/prisma';
 const USER_SELECT = { select: { id: true, name: true, user_name: true, employee: { select: { email: true } } } };
 
 export const WORK_ORDER_INCLUDE = {
-  machine: { select: { id: true, name: true, assetCode: true, firmId: true, firm: { select: { id: true, firm_name: true } } } },
+  machine: {
+    select: {
+      id: true,
+      name: true,
+      assetCode: true,
+      firmId: true,
+      firm: { select: { id: true, firm_name: true } },
+      assignments: {
+        where: { endedAt: null },
+        select: { id: true, firmId: true, firm: { select: { id: true, firm_name: true } } },
+      },
+    },
+  },
   machinePart: { select: { id: true, name: true, partNumber: true } },
   breakdownReport: true,
+  activityType: true, // the work order's own activity type (no longer only via its plan)
+  requestedBy: USER_SELECT,
+  vendor: { select: { id: true, name: true } }, // out-source vendor
   currentAssignee: USER_SELECT,
+  responsible: USER_SELECT,
+  schedule: { select: { id: true, name: true } },
   completedBy: USER_SELECT,
   plan: {
     include: {
@@ -26,9 +43,19 @@ export const WORK_ORDER_INCLUDE = {
     },
   },
   statusLogs: { orderBy: { createdAt: 'desc' as const }, take: 20, include: { changedBy: { select: { id: true, name: true } } } },
-  checklistItems: true,
+  checklistItems: { orderBy: { sortOrder: 'asc' as const } },
   replacementParts: true,
   repairParts: true,
+  // fleet_v7_repair_parts: the Store parts this repair needs, with their live issues (one query for the whole list)
+  partRequirements: {
+    where: { status: 'OPEN' },
+    orderBy: { createdAt: 'asc' as const },
+    include: {
+      issues: { where: { voidedAt: null } },
+      storeIssues: { select: { id: true, quantity: true, status: true } },
+      indents: { select: { id: true, indent_number: true, approved_vendor_name: true, vendor_name1: true } },
+    },
+  },
 } satisfies Prisma.MaintenanceWorkOrderInclude;
 
 export const workOrderRepository = {
