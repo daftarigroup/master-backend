@@ -21,3 +21,6 @@ scripts/
 backups_docs_v1/
 insert data/
 tests/
+
+md/
+creds/

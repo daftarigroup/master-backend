@@ -36,6 +36,7 @@ model AreaOfUse {
   firm_name  String?  @db.Text
   firm       Firm?    @relation(fields: [firm_id], references: [id])
 
+  @@index([name(sort: Asc), id(sort: Asc)], map: "area_of_use_name_id_idx")
   @@map("area_of_use")
 }
 
@@ -176,6 +177,7 @@ model Firm {
   dieselLogs       DieselLog[]
   machineUsageLogs MachineUsageLog[]
 
+  @@index([firm_name(sort: Asc), id(sort: Asc)], map: "firm_firm_name_id_idx")
   @@map("firm")
 }
 
@@ -210,6 +212,7 @@ model Fullkitting {
   firm_id               BigInt?
   firm                  Firm?     @relation(fields: [firm_id], references: [id])
 
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "fullkitting_timestamp_id_idx")
   @@map("fullkitting")
 }
 
@@ -222,6 +225,7 @@ model GroupHead {
   firm       Firm?    @relation(fields: [firm_id], references: [id])
   item       Item[]
 
+  @@index([name(sort: Asc), id(sort: Asc)], map: "group_head_name_id_idx")
   @@map("group_head")
 }
 
@@ -352,6 +356,7 @@ model Indent {
 
   @@index([firm_id, item_id], map: "indent_firm_item_idx")
   @@index([work_order_id], map: "indent_work_order_idx")
+  @@index([indent_number(sort: Desc), id(sort: Desc)], map: "indent_indent_number_id_idx")
   @@map("indent")
 }
 
@@ -383,6 +388,7 @@ model Inventory {
   item    Item?   @relation(fields: [item_id], references: [id])
 
   @@index([firm_id, item_id], map: "inventory_firm_item_idx")
+  @@index([item_name(sort: Asc), id(sort: Asc)], map: "inventory_item_name_id_idx")
   @@map("inventory")
 }
 
@@ -434,6 +440,8 @@ model Issue {
   @@index([requirement_id], map: "issue_requirement_idx")
   @@index([issue_kind], map: "issue_kind_idx")
   @@index([machine_id], map: "issue_machine_idx")
+  @@index([issue_no(sort: Desc), id(sort: Desc)], map: "issue_issue_no_id_idx")
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "issue_timestamp_id_idx")
   @@map("issue")
 }
 
@@ -572,6 +580,8 @@ model Payments {
   firm_id            BigInt?
   firm               Firm?     @relation(fields: [firm_id], references: [id])
 
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "payments_timestamp_id_idx")
+  @@index([actual(sort: Desc), id(sort: Desc)], map: "payments_actual_id_idx")
   @@map("payments")
 }
 
@@ -651,6 +661,7 @@ model PoMaster {
   item    Item?   @relation(fields: [item_id], references: [id])
 
   @@index([firm_id, item_id], map: "po_master_firm_item_idx")
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "po_master_timestamp_id_idx")
   @@map("po_master")
 }
 
@@ -775,6 +786,7 @@ model StockTransfers {
   item    Item?   @relation(fields: [item_id], references: [id])
 
   @@index([item_id], map: "stock_transfers_item_idx")
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "stock_transfers_timestamp_id_idx")
   @@map("stock_transfers")
 }
 
@@ -860,6 +872,8 @@ model StoreIn {
   item    Item?   @relation(fields: [item_id], references: [id])
 
   @@index([firm_id, item_id], map: "store_in_firm_item_idx")
+  @@index([indent_no(sort: Desc), id(sort: Desc)], map: "store_in_indent_no_id_idx")
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "store_in_timestamp_id_idx")
   @@map("store_in")
 }
 
@@ -951,6 +965,7 @@ model TallyEntry {
   firm_id             BigInt?
   firm                Firm?     @relation(fields: [firm_id], references: [id])
 
+  @@index([lift_number(sort: Desc), id(sort: Desc)], map: "tally_entry_lift_number_id_idx")
   @@map("tally_entry")
 }
 
@@ -975,6 +990,7 @@ model Uom {
   firm       Firm?    @relation(fields: [firm_id], references: [id])
   item       Item[]
 
+  @@index([name(sort: Asc), id(sort: Asc)], map: "uom_name_id_idx")
   @@map("uom")
 }
 
@@ -1032,6 +1048,7 @@ model User {
   modify_access                             AccessType
   role                                      Role?      @default(USER)
   day_off                                   String?    @db.Text
+  pms_access                                Boolean?   @default(false)
   employee                                  Employee?
 
   // Asset / Maintenance / Repair system — Maintenance's assignee-type fields FK
@@ -1201,6 +1218,7 @@ model Vendors {
   firm_name    String?  @db.Text
   firm         Firm?    @relation(fields: [firm_id], references: [id])
 
+  @@index([vendor_name(sort: Asc), id(sort: Asc)], map: "vendors_vendor_name_id_idx")
   @@map("vendors")
 }
 
@@ -3826,3 +3844,547 @@ model MachineTransferEvent {
   @@index([transferId, createdAt])
   @@map("machine_transfer_events")
 }
+
+// ==========================================
+// Project Management System (PMS) Models
+// All tables prefixed with pms_*
+// ==========================================
+
+model PMSProject {
+  id                   BigInt    @id @default(autoincrement())
+  serial_no            String    @unique @db.Text  // e.g. "PRJ-001"
+  project_type         String    @db.Text
+  project_name         String    @db.Text
+  agreement_number     String?   @db.Text
+  department           String?   @db.Text
+  division             String?   @db.Text
+  sub_division         String?   @db.Text
+  irrigation_capacity  String?   @db.Text
+  project_location     String?   @db.Text
+  village              String?   @db.Text
+  district             String?   @db.Text
+  state                String?   @db.Text
+  contractor_name      String?   @db.Text
+  contractor_phone     String?   @db.Text
+  contractor_email     String?   @db.Text
+  contractor_address   String?   @db.Text
+  sub_contractors      Json?     // [{name, phone, email, address, higher_type}]
+  start_date           DateTime? @db.Date
+  planned_end_date     DateTime? @db.Date
+  work_period          String?   @db.Text
+  work_order           String?   @db.Text
+  work_order_date      DateTime? @db.Date
+  work_order_document  String?   @db.Text  // S3 URL
+  work_order_doc_name  String?   @db.Text
+  tender_id            String?   @db.Text
+  tender_amount        Decimal?  @db.Decimal(15, 2)
+  percentage           Decimal?  @db.Decimal(5, 2)
+  maintenance_period   String?   @db.Text
+  project_description  String?   @db.Text
+  status               String    @default("Active") @db.Text
+  created_at           DateTime  @default(now()) @db.Timestamptz()
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  // Relations
+  minors               PMSProjectMinor[]
+  designs              PMSProjectDesign[]
+  executions           PMSProjectExecution[]
+  actuals              PMSProjectActual[]
+  stage_entries        PMSStageEntry[]
+  rm_bills             PMSRMBill[]
+  material_reqs        PMSMaterialRequirement[]
+  indents              PMSIndent[]
+  pos                  PMSPO[]
+
+  // Stage Relations (Cascade enabled via serial_no)
+  mobilization         PMSMobilization?
+  finalize_consultant  PMSFinalizeConsultant?
+  sent_po              PMSSentPO?
+  survey               PMSSurvey?
+  drawing_upload       PMSDrawingUpload?
+  final_approval       PMSFinalApproval?
+  drawing              PMSDrawing?
+  calculation_states   PMSCalculationState[]
+
+  @@map("pms_project")
+}
+
+model PMSProjectMinor {
+  id                  String       @id @db.Text // e.g. "PRJ-001-M1" or UUID
+  project_id          BigInt
+  project_no          String       @db.Text
+  minor_name          String       @db.Text
+  contractor_name     String?      @db.Text
+  po_number           String?      @db.Text
+  schedule_file       String?      @db.Text // S3 URL
+  schedule_file_id    String?      @db.Text
+  schedule_file_name  String?      @db.Text
+  schedule_rows       Json?
+  schedule_headers    Json?
+  created_at          DateTime     @default(now()) @db.Timestamptz()
+  updated_at          DateTime     @default(now()) @updatedAt @db.Timestamptz()
+
+  project             PMSProject   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  schedule            PMSSchedule?
+
+  @@index([project_no])
+  @@map("pms_project_minor")
+}
+
+model PMSProjectDesign {
+  id          BigInt     @id @default(autoincrement())
+  project_id  BigInt
+  project_no  String     @unique @db.Text
+  rows        Json       // Array of design lines/chainages
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_no])
+  @@map("pms_project_design")
+}
+
+model PMSProjectExecution {
+  id                   BigInt     @id @default(autoincrement())
+  project_id           BigInt
+  project_no           String     @db.Text
+  entry_id             String?    @db.Text
+  date                 DateTime?  @db.Date
+  stage_number         Int?
+  stage_name           String?    @db.Text
+  submission_date_time String?    @db.Text
+  data                 Json       // Execution measurements and quantities
+  created_at           DateTime   @default(now()) @db.Timestamptz()
+  updated_at           DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project              PMSProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_no])
+  @@index([project_no, stage_number])
+  @@index([entry_id])
+  @@map("pms_project_execution")
+}
+
+model PMSProjectActual {
+  id                   BigInt     @id @default(autoincrement())
+  project_id           BigInt
+  project_no           String     @db.Text
+  entry_id             String?    @db.Text
+  date                 DateTime?  @db.Date
+  stage_number         Int?
+  stage_name           String?    @db.Text
+  submission_date_time String?    @db.Text
+  data                 Json       // Actual measurements, deductions & verified quantities
+  created_at           DateTime   @default(now()) @db.Timestamptz()
+  updated_at           DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project              PMSProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_no])
+  @@index([project_no, stage_number])
+  @@index([entry_id])
+  @@map("pms_project_actual")
+}
+
+model PMSStageEntry {
+  id           String     @id @db.Text // Format: "{projectNo}__stage{stageNumber}__step{stepIndex}"
+  project_id   BigInt
+  project_no   String     @db.Text
+  stage_number Int
+  step_index   Int
+  status       String?    @db.Text
+  data         Json?
+  created_at   DateTime   @default(now()) @db.Timestamptz()
+  updated_at   DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project      PMSProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_no, stage_number])
+  @@map("pms_stage_entry")
+}
+
+model PMSMobilization {
+  id          BigInt     @id @default(autoincrement())
+  project_no  String     @unique @db.Text
+  consultants Json       // Array of mobilization entries
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_mobilization")
+}
+
+model PMSFinalizeConsultant {
+  id          BigInt     @id @default(autoincrement())
+  project_no  String     @unique @db.Text
+  consultants Json       // Array of finalized consultants
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_finalize_consultant")
+}
+
+model PMSSentPO {
+  id          BigInt     @id @default(autoincrement())
+  project_no  String     @unique @db.Text
+  consultants Json       // Subcontractor PO entries and attachment references
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_sent_po")
+}
+
+model PMSSurvey {
+  id                BigInt     @id @default(autoincrement())
+  project_no        String     @unique @db.Text
+  survey_status     String?    @db.Text
+  survey_start_date DateTime?  @db.Date
+  survey_end_date   DateTime?  @db.Date
+  drawing_ready     String?    @db.Text
+  data              Json?
+  created_at        DateTime   @default(now()) @db.Timestamptz()
+  updated_at        DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project           PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_survey")
+}
+
+model PMSDrawingUpload {
+  id                 BigInt     @id @default(autoincrement())
+  project_no         String     @unique @db.Text
+  drawing_date       DateTime?  @db.Date
+  drawing_file       String?    @db.Text // S3 URL
+  drawing_file_name  String?    @db.Text
+  data               Json?
+  created_at         DateTime   @default(now()) @db.Timestamptz()
+  updated_at         DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project            PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_drawing_upload")
+}
+
+model PMSFinalApproval {
+  id             BigInt     @id @default(autoincrement())
+  project_no     String     @unique @db.Text
+  sub_division   Boolean    @default(false)
+  division       Boolean    @default(false)
+  circle_office  Boolean    @default(false)
+  ceo_office     Boolean    @default(false)
+  approval_date  DateTime?  @db.Date
+  remarks        String?    @db.Text
+  created_at     DateTime   @default(now()) @db.Timestamptz()
+  updated_at     DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project        PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_final_approval")
+}
+
+model PMSDrawing {
+  id          BigInt     @id @default(autoincrement())
+  project_no  String     @unique @db.Text
+  minors      Json       // Array of uploaded drawings for minors
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@map("pms_drawing")
+}
+
+model PMSMaterialRequirement {
+  id          BigInt     @id @default(autoincrement())
+  project_id  BigInt
+  project_no  String     @db.Text
+  indent_no   String?    @db.Text
+  data        Json
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_no])
+  @@map("pms_material_requirement")
+}
+
+model PMSSchedule {
+  id          BigInt          @id @default(autoincrement())
+  minor_id    String          @unique @db.Text
+  file_id     String?         @db.Text
+  file_url    String?         @db.Text
+  file_name   String?         @db.Text
+  rows        Json?
+  headers     Json?
+  created_at  DateTime        @default(now()) @db.Timestamptz()
+  updated_at  DateTime        @default(now()) @updatedAt @db.Timestamptz()
+
+  minor       PMSProjectMinor @relation(fields: [minor_id], references: [id], onDelete: Cascade)
+
+  @@map("pms_schedule")
+}
+
+model PMSRMBill {
+  id            BigInt     @id @default(autoincrement())
+  project_id    BigInt
+  project_no    String     @db.Text
+  bill_no       String?    @db.Text
+  rm_no         String?    @db.Text // e.g. "RA-1", "RA-2"
+  bill_type     String     @db.Text // "Execution" or "Actual"
+  bill_date     DateTime?  @db.Date
+  total_amount  Decimal?   @db.Decimal(15, 2)
+  status        String     @default("pending") @db.Text // "pending" | "billed"
+  remarks       String?    @db.Text
+  entries       Json       // Batched execution/actual items
+  calculations  Json?      // Tax, retention, advance deduction breakdown
+  created_at    DateTime   @default(now()) @db.Timestamptz()
+  updated_at    DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project       PMSProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_no, bill_type])
+  @@map("pms_rm_bill")
+}
+
+model PMSProductIMF {
+  id          BigInt   @id @default(autoincrement())
+  po_number   String   @unique @db.Text
+  items       Json     // Line items: qty, issued, returned, damages, rates
+  created_at  DateTime @default(now()) @db.Timestamptz()
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("pms_product_imf")
+}
+
+model PMSDocument {
+  id            BigInt    @id @default(autoincrement())
+  document_uid  String    @unique @db.Text
+  project_no    String?   @db.Text
+  project_name  String?   @db.Text
+  agreement_no  String?   @db.Text
+  title         String    @db.Text
+  doc_type      String    @db.Text
+  file_name     String    @db.Text
+  file_url      String    @db.Text // S3 URL
+  file_size     String?   @db.Text
+  file_type     String?   @db.Text
+  recipient     String?   @db.Text
+  ref_no        String?   @db.Text
+  date          DateTime? @db.Date
+  remarks       String?   @db.Text
+  uploaded_by   String?   @db.Text
+  created_at    DateTime  @default(now()) @db.Timestamptz()
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([project_no])
+  @@map("pms_document")
+}
+
+model PMSEmailLog {
+  id            BigInt   @id @default(autoincrement())
+  log_uid       String   @unique @db.Text
+  project_no    String?  @db.Text
+  project_name  String?  @db.Text
+  agreement_no  String?  @db.Text
+  to            String   @db.Text
+  cc            String?  @db.Text
+  subject       String   @db.Text
+  body          String?  @db.Text
+  attached_docs Json?
+  sent_at       DateTime @default(now()) @db.Timestamptz()
+  status        String   @default("Sent") @db.Text
+  sender        String?  @db.Text
+
+  @@index([project_no])
+  @@map("pms_email_log")
+}
+
+model PMSCalculationState {
+  id          BigInt     @id @default(autoincrement())
+  project_no  String     @db.Text
+  state_type  String     @db.Text // 'ABSTRACT' | 'RA_PLANNING' | 'FINAL_COMPARATIVE'
+  version     Int        @default(1)
+  data        Json       // Full typed state matching TypeScript interfaces
+  audit_logs  Json?
+  snapshots   Json?
+  created_at  DateTime   @default(now()) @db.Timestamptz()
+  updated_at  DateTime   @default(now()) @updatedAt @db.Timestamptz()
+
+  project     PMSProject @relation(fields: [project_no], references: [serial_no], onDelete: Cascade)
+
+  @@unique([project_no, state_type])
+  @@map("pms_calculation_state")
+}
+
+model PMSIndent {
+  id                          Int               @id @default(autoincrement())
+  indent_number               String            @db.Text
+  indent_date                 DateTime          @default(now())
+  project_id                  BigInt
+  project_name                String            @db.Text
+  indenter_name               String            @db.Text
+  priority                    String            @db.Text
+
+  stage                       String            @default("Pending") @db.Text
+  // Stage values: Pending → IndentApproved → VendorRated → TechnicalApproved → ManagementApproved → POCreated → Rejected
+
+  indent_approved_at          DateTime?
+  indent_approved_by          String?           @db.Text
+  indent_approval_remarks     String?           @db.Text
+  indent_status               String?           @db.Text
+
+  vendor_rated_at             DateTime?
+  vendor_type                 String?           @db.Text
+  product_code                String?           @db.Text
+  comparison_sheet_url        String?           @db.Text
+  comparison_sheet_filename   String?           @db.Text
+
+  technical_approved_at       DateTime?
+  technical_approved_by       String?           @db.Text
+  technical_approval_remarks  String?           @db.Text
+
+  management_approved_at      DateTime?
+  management_approved_by      String?           @db.Text
+  management_approval_remarks String?           @db.Text
+  approved_vendor_name        String?           @db.Text
+  approved_rate               Decimal?          @db.Decimal(15, 2)
+  po_required                 Boolean           @default(false)
+  // Vendor recommended at technical approval (pms_indent_po_v1)
+  selected_vendor_id          Int?
+
+  created_at                  DateTime          @default(now())
+  updated_at                  DateTime          @updatedAt
+
+  project                     PMSProject        @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  selected_vendor             PMSIndentVendor?  @relation("PMSIndentSelectedVendor", fields: [selected_vendor_id], references: [id], onDelete: SetNull)
+  items                       PMSIndentItem[]
+  vendors                     PMSIndentVendor[] @relation("PMSIndentVendors")
+  pos                         PMSPO[]
+
+  @@index([stage])
+
+  @@map("pms_indent")
+}
+
+model PMSIndentItem {
+  id                        Int       @id @default(autoincrement())
+  indent_id                 Int
+  indent_type               String    @default("Product") @db.Text
+  group_head                String    @db.Text
+  product_name              String    @db.Text
+  quantity                  Decimal   @db.Decimal(15, 3)
+  approved_quantity         Decimal?  @db.Decimal(15, 3)
+  current_stock_qty         Decimal   @default(0) @db.Decimal(15, 3)
+  uom                       String    @db.Text
+  area_of_use               String    @db.Text
+  expected_requirement_date DateTime
+  attachment_url            String?   @db.Text
+  specifications            String?   @db.Text
+  equipment_type            String?   @db.Text
+  expected_time             String?   @db.Text
+  day_charge                Decimal?  @db.Decimal(15, 2)
+
+  indent                    PMSIndent @relation(fields: [indent_id], references: [id], onDelete: Cascade)
+
+  @@map("pms_indent_item")
+}
+
+model PMSIndentVendor {
+  id            Int       @id @default(autoincrement())
+  indent_id     Int
+  vendor_name   String    @db.Text
+  rate          Decimal   @db.Decimal(15, 2)
+  gst_percent   Decimal   @db.Decimal(5, 2)
+  payment_terms String?   @db.Text
+  delivery_days Int?
+  quotation_url      String?     @db.Text
+  quotation_filename String?     @db.Text
+  rank               Int?
+  enquiry_no         String?     @db.Text
+  enquiry_date       DateTime?   @db.Date
+  rate_unit          String?     @db.Text
+  whatsapp           String?     @db.Text
+  email              String?     @db.Text
+  make               String?     @db.Text
+
+  indent             PMSIndent   @relation("PMSIndentVendors", fields: [indent_id], references: [id], onDelete: Cascade)
+  selected_for       PMSIndent[] @relation("PMSIndentSelectedVendor")
+
+  @@index([indent_id])
+  @@map("pms_indent_vendor")
+}
+
+model PMSPO {
+  id                    Int         @id @default(autoincrement())
+  po_number             String      @unique @db.Text
+  po_date               DateTime
+  // Nullable since pms_indent_po_v1: a PO can be raised without an indent
+  indent_id             Int?
+  indent_number         String      @db.Text
+  project_id            BigInt
+  project_name          String      @db.Text
+  vendor_name           String      @db.Text
+  vendor_address        String?     @db.Text
+  vendor_gstin          String?     @db.Text
+  vendor_email          String?     @db.Text
+  enquiry_no            String?     @db.Text
+  enquiry_date          DateTime?
+  delivery_date         DateTime?
+  delivery_days         Int?
+  delivery_type         String?     @db.Text
+  destination_address   String?     @db.Text
+  site_engineer_name    String?     @db.Text
+  site_engineer_phone   String?     @db.Text
+  site_engineer_email   String?     @db.Text
+  site_engineer_name_2  String?     @db.Text
+  site_engineer_phone_2 String?     @db.Text
+  site_engineer_email_2 String?     @db.Text
+  contractor_name       String?     @db.Text
+  contractor_phone      String?     @db.Text
+  contractor_email      String?     @db.Text
+  sub_contractor_name   String?     @db.Text
+  sub_contractor_phone  String?     @db.Text
+  sub_contractor_email  String?     @db.Text
+  sub_total             Decimal     @db.Decimal(15, 2)
+  gst_amount            Decimal     @db.Decimal(15, 2)
+  grand_total           Decimal     @db.Decimal(15, 2)
+  terms                 Json?
+  remarks               String?     @db.Text
+  status                String      @default("Issued") @db.Text
+  created_at            DateTime    @default(now())
+  updated_at            DateTime    @updatedAt
+
+  indent                PMSIndent?  @relation(fields: [indent_id], references: [id], onDelete: SetNull)
+  project               PMSProject  @relation(fields: [project_id], references: [id])
+  items                 PMSPOItem[]
+
+  @@index([indent_id])
+  @@map("pms_po")
+}
+
+model PMSPOItem {
+  id               Int     @id @default(autoincrement())
+  po_id            Int
+  indent_number    String  @db.Text
+  quotation_number String? @db.Text
+  product_name     String  @db.Text
+  quantity         Decimal @db.Decimal(15, 3)
+  uom              String  @db.Text
+  rate             Decimal @db.Decimal(15, 2)
+  gst_percent      Decimal @db.Decimal(5, 2)
+  discount_percent Decimal @default(0) @db.Decimal(5, 2)
+  amount           Decimal @db.Decimal(15, 2)
+  payment_terms    String? @db.Text
+
+  po               PMSPO   @relation(fields: [po_id], references: [id], onDelete: Cascade)
+
+  @@map("pms_po_item")
+}
+

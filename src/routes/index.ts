@@ -10,6 +10,7 @@ import { assetController } from '../modules/asset/controllers/asset.controller';
 import maintenanceRoutes from '../modules/maintenance/routes/maintenance.routes';
 import repairRoutes from '../modules/repair/routes/repair.routes';
 import fleetRoutes from '../modules/fleet/routes/fleet.routes';
+import pmsRoutes from '../modules/pms/routes/pms.routes';
 import { authenticateJWT, requireLogin } from '../middleware/auth.middleware';
 import { getAwsConfigStatus } from '../config';
 import { prisma } from '../database/prisma';
@@ -94,6 +95,7 @@ router.use('/assets', authenticateJWT, requireLogin, assetRoutes);
 router.use('/maintenance', authenticateJWT, requireLogin, maintenanceRoutes);
 router.use('/repair-system', authenticateJWT, requireLogin, repairRoutes);
 router.use('/fleet', authenticateJWT, fleetRoutes);
+router.use('/pms', authenticateJWT, requireLogin, pmsRoutes);
 // /assets, /maintenance, /repair-system and /user/list are for logged-in users only: before this, a request with no token reached
 // them with no user (approve / transfer / mark-done accepted anonymous calls). The public QR route above stays open.
 
