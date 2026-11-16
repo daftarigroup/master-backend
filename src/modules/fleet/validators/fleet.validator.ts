@@ -90,9 +90,18 @@ export const dailyEntrySchema = z.object({
   }),
 });
 
-export const ledgerSchema = z.object({ query: z.object({ firmId: readFirm, month, includeIdle: bool }) });
+const ledgerRange = {
+  month: month.optional(),
+  from: day.optional(),
+  to: day.optional(),
+};
+const rangeOk = (q: { month?: string; from?: string; to?: string }) =>
+  (q.month !== undefined && !q.from && !q.to) ||
+  (!!q.from && !!q.to && q.from <= q.to && Date.parse(q.to) - Date.parse(q.from) <= 92 * 86_400_000);
+const rangeMsg = { message: 'Give a month, or from and to (from <= to, at most 93 days)' };
+export const ledgerSchema = z.object({ query: z.object({ firmId: readFirm, ...ledgerRange, includeIdle: bool }).refine(rangeOk, rangeMsg) });
 export const ledgerExportSchema = z.object({
-  query: z.object({ firmId: readFirm, month, includeIdle: bool, format: z.enum(['xlsx', 'csv']).default('xlsx') }),
+  query: z.object({ firmId: readFirm, ...ledgerRange, includeIdle: bool, format: z.enum(['xlsx', 'csv']).default('xlsx') }).refine(rangeOk, rangeMsg),
 });
 export const efficiencySchema = z.object({
   query: z.object({ firmId: readFirm, from: day, to: day, machineId: optText }),

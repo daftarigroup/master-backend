@@ -96,6 +96,7 @@ router.get('/indents', indentController.list);
 router.post('/indents', indentController.create);
 router.patch('/indents/:id/approve', indentController.approve);
 router.patch('/indents/:id/vendor-rates', indentController.updateVendorRates);
+router.patch('/indents/:id/approval', indentController.approval);
 router.patch('/indents/:id/technical-approval', indentController.technicalApproval);
 router.patch('/indents/:id/management-approval', indentController.managementApproval);
 router.delete('/indents/:id', indentController.delete);

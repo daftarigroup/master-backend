@@ -28,6 +28,11 @@ export class IndentController {
     res.json({ success: true, data: indent, message: 'Technical approval saved successfully' });
   });
 
+  approval = asyncHandler(async (req: Request, res: Response) => {
+    const indent = await pmsProcurementService.approval(req.params.id, req.body, (req as any).user);
+    res.json({ success: true, data: indent, message: 'Approval saved successfully' });
+  });
+
   managementApproval = asyncHandler(async (req: Request, res: Response) => {
     const indent = await pmsProcurementService.managementApproval(req.params.id, req.body, (req as any).user);
     res.json({ success: true, data: indent, message: 'Management approval saved successfully' });

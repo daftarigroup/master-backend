@@ -4290,6 +4290,12 @@ model PMSIndentItem {
   equipment_type            String?   @db.Text
   expected_time             String?   @db.Text
   day_charge                Decimal?  @db.Decimal(15, 2)
+  // Item-wise approval / PO tracking (one indent can hold several items that move through the stages separately)
+  indent_status             String?   @db.Text
+  approval_status           String?   @db.Text
+  approved_rate             Decimal?  @db.Decimal(15, 2)
+  approved_vendor_name      String?   @db.Text
+  po_number                 String?   @db.Text
 
   indent                    PMSIndent @relation(fields: [indent_id], references: [id], onDelete: Cascade)
 

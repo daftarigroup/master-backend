@@ -71,6 +71,8 @@ export interface LedgerResult {
 
 export interface LedgerInput {
   month: string;
+  /** Explicit day list (a custom range); defaults to every day of `month`. */
+  days?: string[];
   openingBalance: number;
   machines: LedgerMachine[];
   receipts: LedgerReceipt[];
@@ -97,7 +99,7 @@ function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
 }
 
 export function buildLedger(input: LedgerInput): LedgerResult {
-  const days = daysOfMonth(input.month);
+  const days = input.days ?? daysOfMonth(input.month);
   const receiptsByDay = groupBy(input.receipts, (r) => r.date);
   const logsByDay = groupBy(input.dieselLogs, (l) => l.date);
   const usageByDay = groupBy(input.usageLogs, (u) => u.date);

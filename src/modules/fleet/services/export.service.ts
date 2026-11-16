@@ -10,8 +10,8 @@ const PER_MACHINE = ['Diesel', 'Start', 'Stop', 'Usage'] as const;
 
 function table(ledger: MonthLedger) {
   const showOther = ledger.totals.other > 0;
-  const header1: string[] = ['Date'];
-  const header2: string[] = [''];
+  const header1: string[] = ['Date', 'Opening Balance', 'Diesel Received', 'Total Available'];
+  const header2: string[] = ['', '', '', ''];
   for (const m of ledger.machines) {
     PER_MACHINE.forEach((c, i) => {
       header1.push(i === 0 ? m.name : '');
@@ -24,7 +24,7 @@ function table(ledger: MonthLedger) {
 
   const blank = (v: number | null | undefined) => (v === null || v === undefined ? '' : v);
   const rows: (string | number)[][] = ledger.rows.map((r) => {
-    const out: (string | number)[] = [r.date];
+    const out: (string | number)[] = [r.date, r.opening, r.received || '', r.available];
     for (const m of ledger.machines) {
       const c = r.cells[m.id];
       out.push(blank(c?.diesel || null), blank(c?.start), blank(c?.stop), blank(c?.usage));
@@ -34,7 +34,7 @@ function table(ledger: MonthLedger) {
     return out;
   });
 
-  const totals: (string | number)[] = ['Total'];
+  const totals: (string | number)[] = ['Total', ledger.rows[0]?.opening ?? '', ledger.rows.reduce((a, r) => a + r.received, 0), ''];
   for (const m of ledger.machines) {
     const t = ledger.totals.perMachine[m.id];
     totals.push(t?.diesel ?? '', '', '', t?.usage ?? '');
@@ -65,7 +65,7 @@ export async function ledgerToXlsx(ledger: MonthLedger): Promise<Buffer> {
 
   // machine names span their four columns
   ledger.machines.forEach((_, i) => {
-    const first = 2 + i * 4;
+    const first = 5 + i * 4;
     ws.mergeCells(1, first, 1, first + 3);
   });
   [1, 2].forEach((n) => {
@@ -79,10 +79,10 @@ export async function ledgerToXlsx(ledger: MonthLedger): Promise<Buffer> {
 }
 
 export const exportService = {
-  async ledger(ctx: UserAuthContext, q: { firmId: unknown; month: string; format: 'csv' | 'xlsx'; includeIdle?: boolean }) {
+  async ledger(ctx: UserAuthContext, q: { firmId: unknown; month?: string; from?: string; to?: string; format: 'csv' | 'xlsx'; includeIdle?: boolean }) {
     const firmId = requireSingleFirm(ctx, q.firmId);
-    const ledger = await buildMonthLedger(firmId, q.month, { includeIdle: q.includeIdle });
-    const base = `diesel-ledger-${(ledger.firmName ?? String(firmId)).replace(/[^A-Za-z0-9]+/g, '_')}-${q.month}`;
+    const ledger = await buildMonthLedger(firmId, q.month ?? (q.from ?? '').slice(0, 7), { includeIdle: q.includeIdle, from: q.from, to: q.to });
+    const base = `diesel-ledger-${(ledger.firmName ?? String(firmId)).replace(/[^A-Za-z0-9]+/g, '_')}-${ledger.month.replace(/ /g, '_')}`;
     if (q.format === 'csv') {
       return { filename: `${base}.csv`, contentType: 'text/csv; charset=utf-8', body: Buffer.from('﻿' + ledgerToCsv(ledger), 'utf8') };
     }

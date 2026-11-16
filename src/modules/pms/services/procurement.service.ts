@@ -72,6 +72,7 @@ function toIndentDTO(ind: IndentWithRelations) {
       ...it,
       quantity: num(it.quantity),
       approved_quantity: num(it.approved_quantity),
+      approved_rate: num(it.approved_rate),
       current_stock_qty: num(it.current_stock_qty),
       day_charge: num(it.day_charge),
       expected_date: it.expected_requirement_date,
@@ -179,9 +180,9 @@ export class PMSProcurementService {
       indent_type: 'Equipment',
       group_head: e.group_head,
       product_name: e.equipment_name,
-      quantity: 0,
+      quantity: Number(e.quantity) > 0 ? Number(e.quantity) : 1,
       current_stock_qty: 0,
-      uom: 'Unit',
+      uom: 'Nos',
       area_of_use: e.area_of_use,
       expected_requirement_date: new Date(),
       equipment_type: e.type,
@@ -215,17 +216,33 @@ export class PMSProcurementService {
     if (status !== 'Approved' && status !== 'Rejected') throw new ApiError(400, 'status must be "Approved" or "Rejected"');
 
     return prisma.$transaction(async (tx) => {
-      await this.loadIndent(tx, id, ['Pending'], 'Indent Approval');
-      await tx.pMSIndent.update({
-        where: { id },
-        data: {
-          stage: status === 'Approved' ? 'IndentApproved' : 'Rejected',
-          indent_status: status,
-          indent_approved_at: new Date(),
-          indent_approved_by: actorOf(data, user),
-          indent_approval_remarks: data.remarks || null,
-        },
+      await this.loadIndent(tx, id, ['Pending', 'IndentApproved'], 'Indent Approval');
+      const itemId = data?.item_id !== undefined && data?.item_id !== null ? Number(data.item_id) : null;
+      if (itemId !== null) {
+        const target = await tx.pMSIndentItem.findFirst({ where: { id: itemId, indent_id: id } });
+        if (!target) throw new ApiError(400, `Item ${data.item_id} is not part of this indent`);
+        if (target.indent_status) throw new ApiError(409, `Item "${target.product_name}" already has a decision (${target.indent_status})`);
+      }
+      // Rejected items are finished: marking approval_status too keeps them out of every later stage
+      await tx.pMSIndentItem.updateMany({
+        where: { indent_id: id, indent_status: null, ...(itemId !== null ? { id: itemId } : {}) },
+        data: { indent_status: status, ...(status === 'Rejected' ? { approval_status: 'Rejected' } : {}) },
       });
+      // An approved item moves ahead right away; items still awaiting a decision stay in the Indent Approval list
+      const left = await tx.pMSIndentItem.count({ where: { indent_id: id, indent_status: null } });
+      const anyApproved = (await tx.pMSIndentItem.count({ where: { indent_id: id, indent_status: 'Approved' } })) > 0;
+      if (anyApproved || left === 0) {
+        await tx.pMSIndent.update({
+          where: { id },
+          data: {
+            stage: anyApproved ? 'IndentApproved' : 'Rejected',
+            indent_status: anyApproved ? 'Approved' : 'Rejected',
+            indent_approved_at: new Date(),
+            indent_approved_by: actorOf(data, user),
+            indent_approval_remarks: data.remarks || null,
+          },
+        });
+      }
       return this.getIndentDTO(tx, id);
     });
   }
@@ -237,23 +254,25 @@ export class PMSProcurementService {
     if (vendors.length === 0) throw new ApiError(400, 'At least one vendor quote is required');
     vendors.forEach((v: any, i: number) => {
       if (!String(v?.vendor_name || '').trim()) throw new ApiError(400, `Vendor #${i + 1}: vendor_name is required`);
-      if (!(Number(v.rate) > 0)) throw new ApiError(400, `Vendor #${i + 1}: rate must be greater than 0`);
     });
 
     return prisma.$transaction(async (tx) => {
       await this.loadIndent(tx, id, ['IndentApproved', 'VendorRated'], 'Vendor Rate Update');
       await tx.pMSIndentVendor.deleteMany({ where: { indent_id: id } });
+      // Enquiry numbers are generated here (ENQ-0001, ENQ-0002, ...); a quote that already has one keeps it
+      const used = await tx.pMSIndentVendor.findMany({ where: { enquiry_no: { startsWith: 'ENQ-' } }, select: { enquiry_no: true } });
+      let nextEnq = used.reduce((m, r) => Math.max(m, parseInt(String(r.enquiry_no).slice(4), 10) || 0), 0);
       await tx.pMSIndentVendor.createMany({
         data: vendors.map((v: any) => ({
           indent_id: id,
           vendor_name: String(v.vendor_name).trim(),
-          rate: Number(v.rate),
+          rate: 0, // basic rate is no longer taken at this stage (the approved rate is set later)
           gst_percent: Number(v.gst_percent) || 0,
           payment_terms: v.payment_terms || null,
           delivery_days: v.delivery_days ? Number(v.delivery_days) : null,
           quotation_url: v.quotation_url || null,
           quotation_filename: v.quotation_filename || null,
-          enquiry_no: v.enquiry_no || null,
+          enquiry_no: v.enquiry_no || `ENQ-${String(++nextEnq).padStart(4, '0')}`,
           enquiry_date: v.enquiry_date ? new Date(v.enquiry_date) : null,
           rate_unit: v.rate_unit || null,
           whatsapp: v.whatsapp || null,
@@ -321,6 +340,54 @@ export class PMSProcurementService {
           approved_vendor_name: isApproved ? data.approved_vendor_name || selected?.vendor_name || null : null,
           approved_rate: isApproved ? Number(data.approved_rate) : null,
           po_required: isApproved && data.po_required !== false,
+        },
+      });
+      return this.getIndentDTO(tx, id);
+    });
+  }
+
+  // Technical + management sign-off in ONE step, item by item. The indent stays at VendorRated until every item has a decision,
+  // then moves to ManagementApproved (at least one approved) or Rejected (all rejected).
+  async approval(idParam: any, data: any, user?: any) {
+    const id = parseId(idParam);
+    const approved = data?.decision === 'Approved' || data?.status === 'ManagementApproved';
+    if (!approved && !(data?.decision === 'Rejected' || data?.status === 'Rejected')) throw new ApiError(400, 'decision must be "Approved" or "Rejected"');
+    const vendorId = Number(data?.selected_vendor_id ?? data?.selected_vendor?.id);
+    if (approved && !vendorId) throw new ApiError(400, 'selected_vendor is required');
+    if (approved && !(Number(data.approved_rate) > 0)) throw new ApiError(400, 'approved_rate must be greater than 0');
+
+    return prisma.$transaction(async (tx) => {
+      const indent = await this.loadIndent(tx, id, ['VendorRated'], 'Approval');
+      const selected = indent.vendors.find((v) => v.id === vendorId);
+      if (approved && !selected) throw new ApiError(400, `Vendor ${vendorId} is not one of the quotes on indent ${indent.indent_number}`);
+
+      const items = await tx.pMSIndentItem.findMany({ where: { indent_id: id, indent_status: 'Approved' } });
+      const itemId = data?.item_id !== undefined && data?.item_id !== null ? Number(data.item_id) : null;
+      const target = itemId !== null ? items.find((i) => i.id === itemId) : null;
+      if (itemId !== null && !target) throw new ApiError(400, `Item ${data.item_id} is not part of indent ${indent.indent_number}`);
+      if (target?.approval_status) throw new ApiError(409, `Item "${target.product_name}" already has a decision (${target.approval_status})`);
+
+      const now = new Date();
+      const actor = actorOf(data, user);
+      const status = approved ? 'Approved' : 'Rejected';
+      const decided = { approval_status: status, approved_rate: approved ? Number(data.approved_rate) : null, approved_vendor_name: approved ? selected!.vendor_name : null };
+      if (target) await tx.pMSIndentItem.update({ where: { id: target.id }, data: decided });
+      else await tx.pMSIndentItem.updateMany({ where: { indent_id: id, indent_status: 'Approved', approval_status: null }, data: decided });
+
+      const left = await tx.pMSIndentItem.count({ where: { indent_id: id, indent_status: 'Approved', approval_status: null } });
+      const anyApproved = (await tx.pMSIndentItem.count({ where: { indent_id: id, approval_status: 'Approved' } })) > 0;
+      await tx.pMSIndent.update({
+        where: { id },
+        data: {
+          ...(left === 0 ? { stage: anyApproved ? 'ManagementApproved' : 'Rejected' } : {}),
+          ...(approved ? { selected_vendor_id: vendorId, approved_vendor_name: selected!.vendor_name, approved_rate: Number(data.approved_rate) } : {}),
+          technical_approved_at: now,
+          technical_approved_by: actor,
+          technical_approval_remarks: data.remarks || null,
+          management_approved_at: now,
+          management_approved_by: actor,
+          management_approval_remarks: data.remarks || null,
+          po_required: anyApproved,
         },
       });
       return this.getIndentDTO(tx, id);
@@ -444,7 +511,14 @@ export class PMSProcurementService {
         });
 
         if (indent) {
-          await tx.pMSIndent.update({ where: { id: indent.id }, data: { stage: 'POCreated', po_required: false } });
+          // Mark the indent items this PO covers; the indent is only "POCreated" once every approved item has a PO
+          const itemIds = lineItems.map((it: any) => Number(it.indent_item_id)).filter((n: number) => Number.isInteger(n) && n > 0);
+          await tx.pMSIndentItem.updateMany({
+            where: { indent_id: indent.id, approval_status: 'Approved', po_number: null, ...(itemIds.length ? { id: { in: itemIds } } : {}) },
+            data: { po_number: po.po_number },
+          });
+          const waiting = await tx.pMSIndentItem.count({ where: { indent_id: indent.id, approval_status: 'Approved', po_number: null } });
+          await tx.pMSIndent.update({ where: { id: indent.id }, data: waiting === 0 ? { stage: 'POCreated', po_required: false } : { po_required: true } });
         }
         return toPODTO(po);
       });

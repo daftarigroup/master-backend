@@ -20,6 +20,13 @@ export function shiftMonth(month: string, delta: number): string {
   return d.toISOString().slice(0, 7);
 }
 
+/** Every 'YYYY-MM-DD' from `from` to `to`, inclusive. */
+export function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let t = Date.parse(`${from}T00:00:00Z`), end = Date.parse(`${to}T00:00:00Z`); t <= end; t += 86_400_000) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
 /** Every 'YYYY-MM-DD' of a 'YYYY-MM' month, in order. */
 export function daysOfMonth(month: string): string[] {
   const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);

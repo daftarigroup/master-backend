@@ -132,9 +132,9 @@ export function mapWorkLog(r: Row, actor?: ActorFlags) {
     // what THIS caller may do with the row (the server re-checks every action)
     ...(actor
       ? {
-          canEdit: r.voidedAt === null && ((mine && (r.status === 'PENDING' || r.status === 'REJECTED')) || (r.status === 'PENDING' && canApproveRow({ ...actor }, { ...r, createdById: 0n } as Row))),
-          canApprove: r.voidedAt === null && r.status === 'PENDING' && !isOpen && canApproveRow(actor, r),
-          canReopen: r.voidedAt === null && r.status !== 'PENDING' && canApproveRow(actor, { ...r, createdById: 0n } as Row),
+          canEdit: r.voidedAt === null && (mine || canApproveRow({ ...actor }, { ...r, createdById: 0n } as Row)),
+          canApprove: false,
+          canReopen: false,
         }
       : {}),
   };
@@ -180,11 +180,6 @@ async function softWarnings(db: Db, args: { machineId: string; excludeId?: strin
       select: { logNumber: true, startedAt: true },
     });
     if (overlap) out.push({ code: 'TIME_OVERLAP', message: `This time window overlaps another work log${overlap.logNumber ? ` (${overlap.logNumber})` : ''} on the same machine.` });
-    if (args.readingUnit === 'HOURS' && args.usage !== null) {
-      const clock = Math.round((args.stoppedAt.getTime() - args.startedAt.getTime()) / 60_000);
-      const variance = Math.round(Math.abs(clock - args.usage * 60));
-      if (variance > 10) out.push({ code: 'CLOCK_METER_VARIANCE', message: `The clock window (${clock} min) differs from the meter usage (${Math.round(args.usage * 60)} min) by ${variance} min. The meter is used for hours and cost.` });
-    }
   }
   if (args.operatorId) {
     const assigned = await db.machineOperatorAssignment.findMany({ where: { machineId: args.machineId, ...activeOperatorWhere(), OR: [{ shift: null }, { shift: args.shift as 'DAY' | 'NIGHT' | 'GENERAL' }] }, select: { userId: true } });
@@ -257,12 +252,12 @@ export const workLogService = {
             shift,
             workTypeId: body.workTypeId ?? null,
             locationText: body.locationText?.trim() || null,
-            status: 'PENDING',
+            status: 'APPROVED',
             clientRequestId: body.clientRequestId ?? null,
           },
         });
         warnings.push(...w);
-        await logStatus(tx, log.id, null, 'PENDING', userId, 'Created');
+        await logStatus(tx, log.id, null, 'APPROVED', userId, 'Created');
 
         const saved = await tx.machineUsageLog.findUniqueOrThrow({ where: { id: log.id }, include: INCLUDE });
         return saved;
@@ -285,10 +280,9 @@ export const workLogService = {
     rejectFuel(body);
     const row = await prisma.machineUsageLog.findFirst({ where: { id, machine: await machineAccessWhere(ctx), voidedAt: null }, include: INCLUDE });
     if (!row) throw ApiError.notFound('Work log not found');
-    if (row.status === 'APPROVED') throw ApiError.conflict('This work log is approved and locked. An approver can reopen it.');
     const actor = await actorFlags(prisma, ctx, [row]);
     const own = row.createdById === userId;
-    const approverEdit = row.status === 'PENDING' && (actor.general || actor.responsible.get(row.machineId) === userId);
+    const approverEdit = (actor.general || actor.responsible.get(row.machineId) === userId);
     if (!(own || approverEdit)) throw ApiError.forbidden('Only the person who logged this entry, or an approver, can edit it');
 
     const machine = row.machine;
