@@ -20,6 +20,7 @@ router.get('/work-logs/approval-count', c.workLogApprovalCount);
 router.get('/work-logs/prefill/:id', validateParsed(prefillSchema), c.prefillWorkLog);
 router.get('/work-logs/:id', validateParsed(workLogIdSchema), c.getWorkLog);
 router.patch('/work-logs/:id', validateParsed(updateWorkLogSchema), c.updateWorkLog);
+router.delete('/work-logs/:id', validateParsed(workLogIdSchema), c.deleteWorkLog);
 router.post('/work-logs/:id/approve', validateParsed(workLogIdSchema), c.approveWorkLog);
 router.post('/work-logs/:id/reject', validateParsed(rejectWorkLogSchema), c.rejectWorkLog);
 router.post('/work-logs/:id/reopen', validateParsed(reopenWorkLogSchema), c.reopenWorkLog);

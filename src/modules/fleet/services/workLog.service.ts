@@ -390,6 +390,18 @@ export const workLogService = {
     return { log: mapWorkLog(updated, await actorFlags(prisma, ctx, [updated])) };
   },
 
+  /** Delete = soft void: the entry disappears from lists and the reading chain, the row and who/why stay for audit. */
+  async remove(ctx: UserAuthContext, id: string) {
+    const userId = requireUserId(ctx);
+    const row = await prisma.machineUsageLog.findFirst({ where: { id, machine: await machineAccessWhere(ctx), voidedAt: null }, include: INCLUDE });
+    if (!row) throw ApiError.notFound('Work log not found');
+    const actor = await actorFlags(prisma, ctx, [row]);
+    const own = row.createdById === userId;
+    if (!(own || actor.general || actor.responsible.get(row.machineId) === userId)) throw ApiError.forbidden('Only the person who logged this entry, or an approver, can delete it');
+    await prisma.machineUsageLog.update({ where: { id }, data: { voidedAt: new Date(), voidedById: userId, voidReason: 'Deleted from Work Logs' } });
+    return { id, deleted: true };
+  },
+
   /** An approver puts an approved or rejected log back to PENDING so it can be corrected. Logged with who and why. */
   async reopen(ctx: UserAuthContext, id: string, note: string) {
     const userId = requireUserId(ctx);
@@ -496,7 +508,7 @@ export const workLogService = {
     const settings = await opsSettingsFor(prisma, firmId);
     const shift = shiftFor(at, settings);
     const [lastStop, open, op, due, transit] = await Promise.all([
-      currentReadingFor(prisma, machine),
+      currentReadingFor(prisma, { ...machine, openingReading: 0 }),
       prisma.machineUsageLog.findFirst({ where: { machineId, voidedAt: null, status: { not: 'REJECTED' }, stopReading: null }, select: { id: true, startReading: true, startedAt: true, logNumber: true } }),
       prisma.machineOperatorAssignment.findFirst({ where: { machineId, ...activeOperatorWhere(), OR: [{ shift: null }, { shift }] }, include: { user: { select: { id: true, name: true, user_name: true } } } }),
       dueForMachines(prisma, [machine]),

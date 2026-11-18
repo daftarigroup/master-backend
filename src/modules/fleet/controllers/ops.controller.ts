@@ -28,6 +28,7 @@ export const opsController = {
     return ok(res, r, r.idempotent ? 200 : 201);
   }),
   updateWorkLog: h(async (req, res) => ok(res, await workLogService.update(ctx(req), id(req), body(req)))),
+  deleteWorkLog: h(async (req, res) => ok(res, await workLogService.remove(ctx(req), id(req)))),
   approveWorkLog: h(async (req, res) => ok(res, await workLogService.approve(ctx(req), id(req)))),
   rejectWorkLog: h(async (req, res) => ok(res, await workLogService.reject(ctx(req), id(req), body(req).reason))),
   reopenWorkLog: h(async (req, res) => ok(res, await workLogService.reopen(ctx(req), id(req), body(req).note))),
