@@ -3,6 +3,7 @@ import { ApiError } from '../../../utils/ApiError';
 import { fleetConfig } from '../../fleet/config';
 import { currentReadingFor } from '../../fleet/lib/currentReading';
 import { recordIssue } from '../../fleet/services/dieselLog.service';
+import { toIstDateString } from '../../fleet/lib/istDate';
 import { StockService } from './stock.service';
 import { normalizeItemName } from './itemRef.service';
 
@@ -109,7 +110,8 @@ export class StoreDieselService {
       live &&
       Number(live.litres) === litres &&
       (live.meterReading === null ? null : Number(live.meterReading)) === reading &&
-      live.siteLocationId === siteLocationId
+      live.siteLocationId === siteLocationId &&
+      toIstDateString(live.issuedAt) === toIstDateString(issuedAt)
     ) {
       return; // nothing changed
     }

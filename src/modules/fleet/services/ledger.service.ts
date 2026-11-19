@@ -48,7 +48,7 @@ async function storeDieselDaily(firmId: bigint, from: string, to: string) {
               WHEN btrim(x.material_date::text) ~ '^\\d{4}-\\d{2}-\\d{2}' THEN left(btrim(x.material_date::text), 10) END AS day,
               CASE WHEN x.status = 'Reject' THEN -${NUMSQL('x.received_quantity')} ELSE ${NUMSQL('x.received_quantity')} END AS qty
             FROM store_in x WHERE ${firmOf('x', ['firm_name', 'firm_name_match'])} = $1 AND ${like.replace('%s', 'x.product_name')}`),
-    q<{ day: string; qty: number }>(`SELECT COALESCE(${ISTDAY('x.actual1')}, ${ISTDAY('x.timestamp')}) AS day, (${NUMSQL('x.given_qty')} - ${NUMSQL('x.rejected_damage_qty')}) AS qty
+    q<{ day: string; qty: number }>(`SELECT COALESCE(to_char(x.planned1, 'YYYY-MM-DD'), ${ISTDAY('x.actual1')}, ${ISTDAY('x.timestamp')}) AS day, (${NUMSQL('x.given_qty')} - ${NUMSQL('x.rejected_damage_qty')}) AS qty
             FROM issue x WHERE ${firmOf('x', ['firm_name'])} = $1 AND ${like.replace('%s', 'x.product_name')}`),
     q<{ day: string; qty: number }>(`SELECT ${ISTDAY('x.timestamp')} AS day, CASE WHEN x.to_firm_id = $1 THEN x.quantity ELSE -x.quantity END AS qty
             FROM stock_transfers x WHERE (x.to_firm_id = $1 OR x.from_firm_id = $1) AND ${like.replace('%s', 'x.product_name')}`),
