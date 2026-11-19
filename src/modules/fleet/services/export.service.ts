@@ -19,8 +19,8 @@ function table(ledger: MonthLedger) {
     });
   }
   if (showOther) { header1.push('Other'); header2.push(''); }
-  header1.push('Total');
-  header2.push('');
+  header1.push('Total', 'Closing Balance');
+  header2.push('', '');
 
   const blank = (v: number | null | undefined) => (v === null || v === undefined ? '' : v);
   const rows: (string | number)[][] = ledger.rows.map((r) => {
@@ -30,7 +30,7 @@ function table(ledger: MonthLedger) {
       out.push(blank(c?.diesel || null), blank(c?.start), blank(c?.stop), blank(c?.usage));
     }
     if (showOther) out.push(r.other || '');
-    out.push(r.total || '');
+    out.push(r.total || '', r.closing);
     return out;
   });
 
@@ -40,7 +40,7 @@ function table(ledger: MonthLedger) {
     totals.push(t?.diesel ?? '', '', '', t?.usage ?? '');
   }
   if (showOther) totals.push(ledger.totals.other);
-  totals.push(ledger.totals.total);
+  totals.push(ledger.totals.total, ledger.rows[ledger.rows.length - 1]?.closing ?? '');
   return { header1, header2, rows, totals };
 }
 
