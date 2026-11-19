@@ -30,6 +30,8 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10); // @db.Date columns co
 
 const NUMSQL = (c: string) => `(CASE WHEN btrim(COALESCE(${c}::text, '')) ~ '^-?[0-9]+([.][0-9]+)?$' THEN btrim(${c}::text)::numeric ELSE 0 END)`;
 const ISTDAY = (c: string) => `((${c} AT TIME ZONE 'Asia/Kolkata')::date)::text`;
+/** The diesel ledger starts here: stock opening and every movement before this day count as 0 (first diesel came on 04-02-2026). */
+const LEDGER_START = '2026-02-04';
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
@@ -53,12 +55,13 @@ async function storeDieselDaily(firmId: bigint, from: string, to: string) {
     q<{ day: string; qty: number }>(`SELECT ${ISTDAY('x.timestamp')} AS day, CASE WHEN x.to_firm_id = $1 THEN x.quantity ELSE -x.quantity END AS qty
             FROM stock_transfers x WHERE (x.to_firm_id = $1 OR x.from_firm_id = $1) AND ${like.replace('%s', 'x.product_name')}`),
   ]);
-  let balance = Number(inv[0]?.opening ?? 0);
+  void inv; // store opening ignored: the ledger starts from zero on LEDGER_START
+  let balance = 0;
   const received: Record<string, number> = {};
   const issuedBy: Record<string, number> = {};
   const add = (rows: Array<{ day: string | null; qty: unknown }>, sign: 1 | -1) => {
     for (const r of rows) {
-      if (!r.day) continue;
+      if (!r.day || r.day < LEDGER_START) continue;
       const v = Number(r.qty) || 0;
       if (r.day > to) continue;
       if (r.day < from) balance += sign * v;
