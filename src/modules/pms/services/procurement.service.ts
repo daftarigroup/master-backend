@@ -529,6 +529,72 @@ export class PMSProcurementService {
       throw err;
     }
   }
+
+  // Edit an issued PO/contract in place: header fields + full replacement of line items
+  async updatePO(idParam: any, data: any) {
+    const id = parseId(idParam);
+    const lineItems = Array.isArray(data?.line_items) ? data.line_items : [];
+    if (!String(data?.vendor_name || '').trim()) throw new ApiError(400, 'vendor_name is required');
+    if (lineItems.length === 0) throw new ApiError(400, 'At least one line item is required');
+    lineItems.forEach((it: any, i: number) => {
+      if (!String(it?.product_name || '').trim()) throw new ApiError(400, `Line ${i + 1}: product_name is required`);
+      if (!(Number(it.quantity) > 0)) throw new ApiError(400, `Line ${i + 1}: quantity must be greater than 0`);
+    });
+    const existing = await prisma.pMSPO.findUnique({ where: { id } });
+    if (!existing) throw new ApiError(404, `PO not found: ${idParam}`);
+    const s = (v: any) => (v ? String(v) : null);
+    const po = await prisma.$transaction(async (tx) => {
+      await tx.pMSPOItem.deleteMany({ where: { po_id: id } });
+      return tx.pMSPO.update({
+        where: { id },
+        data: {
+          vendor_name: String(data.vendor_name).trim(),
+          vendor_address: s(data.vendor_address),
+          vendor_gstin: s(data.vendor_gstin),
+          vendor_email: s(data.vendor_email),
+          delivery_date: parseDate(data.delivery_date),
+          destination_address: s(data.destination_address),
+          site_engineer_name: s(data.site_engineer_name),
+          site_engineer_phone: s(data.site_engineer_phone),
+          site_engineer_email: s(data.site_engineer_email),
+          contractor_name: s(data.contractor_name),
+          contractor_phone: s(data.contractor_phone),
+          contractor_email: s(data.contractor_email),
+          sub_contractor_name: s(data.sub_contractor_name),
+          sub_contractor_phone: s(data.sub_contractor_phone),
+          sub_contractor_email: s(data.sub_contractor_email),
+          sub_total: Number(data.sub_total) || 0,
+          gst_amount: Number(data.gst_amount) || 0,
+          grand_total: Number(data.grand_total) || 0,
+          terms: Array.isArray(data.terms) ? data.terms : [],
+          remarks: s(data.remarks),
+          items: {
+            create: lineItems.map((it: any) => {
+              const qty = Number(it.quantity);
+              const rate = Number(it.rate) || 0;
+              const gst = Number(it.gst_percent) || 0;
+              const disc = Number(it.discount_percent) || 0;
+              const base = qty * rate * (1 - disc / 100);
+              return {
+                indent_number: it.indent_number || existing.indent_number || '',
+                quotation_number: it.quotation_number || null,
+                product_name: String(it.product_name).trim(),
+                quantity: qty,
+                uom: it.uom || 'Nos',
+                rate,
+                gst_percent: gst,
+                discount_percent: disc,
+                amount: it.amount !== undefined && it.amount !== null ? Number(it.amount) : base + (base * gst) / 100,
+                payment_terms: it.payment_terms || null,
+              };
+            }),
+          },
+        },
+        include: { items: { orderBy: { id: 'asc' } } },
+      });
+    });
+    return toPODTO(po);
+  }
 }
 
 export const pmsProcurementService = new PMSProcurementService();

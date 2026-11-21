@@ -17,6 +17,11 @@ export class POController {
     const po = await pmsProcurementService.createPO(req.body);
     res.status(201).json({ success: true, data: po, message: `PO ${po.po_number} created successfully` });
   });
+
+  update = asyncHandler(async (req: Request, res: Response) => {
+    const po = await pmsProcurementService.updatePO(req.params.id, req.body);
+    res.json({ success: true, data: po, message: `PO ${po.po_number} updated successfully` });
+  });
 }
 
 export const poController = new POController();

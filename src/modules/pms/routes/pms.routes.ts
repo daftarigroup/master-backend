@@ -6,6 +6,7 @@ import { billingController } from '../controllers/billing.controller';
 import { documentController } from '../controllers/document.controller';
 import { indentController } from '../controllers/indent.controller';
 import { poController } from '../controllers/po.controller';
+import { contractVendorController } from '../controllers/contractVendor.controller';
 import { validate } from '../../../middleware/validate.middleware';
 import { createProjectSchema, updateProjectSchema, createMinorSchema } from '../validators/project.validator';
 
@@ -102,8 +103,12 @@ router.patch('/indents/:id/management-approval', indentController.managementAppr
 router.delete('/indents/:id', indentController.delete);
 
 // ==================== PURCHASE ORDERS ====================
+router.get('/contract-vendors', contractVendorController.list);
+router.post('/contract-vendors', contractVendorController.save);
+router.delete('/contract-vendors/:id', contractVendorController.remove);
 router.get('/pos', poController.list);
 router.post('/pos', poController.create);
 router.get('/pos/:id', poController.getById);
+router.patch('/pos/:id', poController.update);
 
 export default router;

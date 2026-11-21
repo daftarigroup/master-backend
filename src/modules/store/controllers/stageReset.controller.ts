@@ -61,6 +61,10 @@ export class StageResetController {
     const result = await this.service.resetIssueStage(id);
     res.json({ success: true, message: `Issue ID ${id} approval reset to Pending successfully`, data: result });
   });
+
+  deleteIssue = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const result = await this.service.deleteIssue(id);
+    res.json({ success: true, message: `Issue ID ${id} deleted permanently`, data: result });
+  });
 }
-
-

@@ -4375,6 +4375,18 @@ model PMSPO {
   @@map("pms_po")
 }
 
+// Contract by Vendor: default contract items per vendor from the Vendors master
+model PMSContractVendor {
+  id          Int      @id @default(autoincrement())
+  vendor_id   BigInt?
+  vendor_name String   @unique @db.Text
+  items       Json
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("pms_contract_vendor")
+}
+
 model PMSPOItem {
   id               Int     @id @default(autoincrement())
   po_id            Int

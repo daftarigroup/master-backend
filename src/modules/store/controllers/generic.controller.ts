@@ -126,6 +126,26 @@ const TABLE_INVALIDATION_DEPENDENCIES: Record<string, string[]> = {
 };
 
 /**
+ * Inventory / indent / issue keep a text copy of the group head. When an item's group head
+ * (or a group head's name) is changed in master, refresh those copies from the master.
+ */
+async function syncGroupHeadCopies(table: string) {
+  if (table !== 'item' && table !== 'group_head') return;
+  for (const t of ['inventory', 'indent', 'issue']) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "${t}" x SET group_head = g.name FROM item i JOIN group_head g ON g.id = i.group_head_id WHERE x.item_id = i.id AND x.group_head IS DISTINCT FROM g.name`
+      );
+    } catch (err) {
+      console.warn(`Could not sync group_head copies for '${t}':`, err);
+    }
+  }
+  invalidateTableCache('inventory');
+  invalidateTableCache('indent');
+  invalidateTableCache('issue');
+}
+
+/**
  * Invalidate cached query results for the mutated table and its downstream dependencies
  */
 export function invalidateTableCache(table: string) {
@@ -1023,6 +1043,7 @@ export class GenericController {
     });
 
     // Invalidate cached query results for the mutated table and dependencies
+    await syncGroupHeadCopies(table);
     invalidateTableCache(table);
 
     res.json({
@@ -1098,6 +1119,7 @@ export class GenericController {
     });
 
     // Invalidate cached query results for the mutated table and dependencies
+    await syncGroupHeadCopies(table);
     invalidateTableCache(table);
     if (stockTable) invalidateTableCache('inventory');
 

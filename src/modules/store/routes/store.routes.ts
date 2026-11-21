@@ -103,6 +103,7 @@ router.post('/stage-reset/po/:poNumber', stageResetController.resetPOCreation);
 router.delete('/stage-reset/po/:poNumber', stageResetController.resetPOCreation);
 router.post('/stage-reset/issue/:id', stageResetController.resetIssueStage);
 router.delete('/stage-reset/issue/:id', stageResetController.resetIssueStage);
+router.delete('/issue-permanent/:id', stageResetController.deleteIssue);
 
 
 // ==================== UPLOAD & FILE ROUTES ====================

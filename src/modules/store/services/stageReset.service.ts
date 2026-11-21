@@ -631,6 +631,28 @@ export class StageResetService {
 
     return updated;
   }
+
+  /**
+   * Permanently delete an issue record (Store Data history delete).
+   * Unlike resetIssueStage it does NOT send the record back to Pending.
+   */
+  async deleteIssue(id: number) {
+    const existing = await prisma.issue.findUnique({ where: { id: BigInt(id) } });
+    if (!existing) {
+      throw new Error(`Issue record with ID ${id} not found`);
+    }
+
+    await StoreMaintenanceService.assertUndoable(prisma as any, id);
+    // void diesel log / maintenance consumption first, while the issue row still exists
+    await StoreDieselService.reconcile(prisma as any, id, null);
+    await StoreMaintenanceService.reconcile(prisma as any, id);
+
+    await prisma.issue.delete({ where: { id: BigInt(id) } });
+
+    if (existing.product_name) {
+      const inventoryService = new InventoryStockService();
+      await inventoryService.syncInventoryItemAggregations(existing.product_name);
+    }
+    return { id };
+  }
 }
-
-
