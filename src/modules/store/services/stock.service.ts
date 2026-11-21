@@ -198,7 +198,8 @@ export class StockService {
 
     const out = [...buckets.values()].filter((b) => firmId === null || b.firmId === firmId);
     for (const b of out) {
-      b.current = b.opening + b.lifted + b.transferIn + (b.transfersIn - b.transfersOut) - b.purchaseReturn - (b.issued - b.issueReturn);
+      // rounded to 2 decimals so float drift (e.g. 9.9999999) never blocks issuing the full stock
+      b.current = Math.round((b.opening + b.lifted + b.transferIn + (b.transfersIn - b.transfersOut) - b.purchaseReturn - (b.issued - b.issueReturn)) * 100) / 100;
     }
     return out.sort((a, b) => a.itemName.localeCompare(b.itemName) || a.groupHead.localeCompare(b.groupHead));
   }

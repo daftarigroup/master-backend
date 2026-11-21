@@ -67,7 +67,9 @@ export class StoreDieselService {
     const bucket = rows.find((r) => normalizeItemName(r.groupHead) === gh) ?? rows[0];
     const alreadyIssued = this.isApproved(issue.status) ? toNumber(issue.given_qty) : 0; // already counted in `current`
     const available = (bucket?.current ?? 0) + alreadyIssued;
-    if (newGiven > available) {
+    // compare at 2 decimals: 10 L must be allowed when stock is 9.9999 (float drift)
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    if (r2(newGiven) > r2(available)) {
       throw new ApiError(409, `Cannot issue ${newGiven}${unit ? ` ${unit}` : ''} of ${issue.product_name}: the project's Store holds only ${available}${unit ? ` ${unit}` : ''}`);
     }
   }
